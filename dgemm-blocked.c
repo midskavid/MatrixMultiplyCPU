@@ -1,3 +1,4 @@
+#include <stdio.h>
 /*
  *  A simple blocked implementation of matrix multiply
  *  Provided by Jim Demmel at UC Berkeley
@@ -9,9 +10,11 @@
 const char *dgemm_desc = "Simple blocked dgemm.";
 
 #if !defined(BLOCK_SIZE)
-#define BLOCK_SIZE 37
+#define BLOCK_SIZE 32
 // #define BLOCK_SIZE 719
 #endif
+
+int L2_BLOCK_SIZE = 2;
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -43,6 +46,8 @@ static void do_block(int lda, int M, int N, int K, double *A, double *B, double 
  * On exit, A and B maintain their input values. */
 void square_dgemm(int lda, double *A, double *B, double *C)
 {
+  // printf("LDA = %d", lda);
+  // printf("size of double is %d", sizeof(double));
 #ifdef TRANSPOSE
   for (int i = 0; i < lda; ++i)
     for (int j = i + 1; j < lda; ++j)
@@ -59,17 +64,27 @@ void square_dgemm(int lda, double *A, double *B, double *C)
       /* Accumulate block dgemms into block of C */
       for (int k = 0; k < lda; k += BLOCK_SIZE)
       {
-        /* Correct block dimensions if block "goes off edge of" the matrix */
-        int M = min(BLOCK_SIZE, lda - i);
-        int N = min(BLOCK_SIZE, lda - j);
-        int K = min(BLOCK_SIZE, lda - k);
+        for (int i_block_l2 = 0; i_block_l2 < BLOCK_SIZE; i_block_l2 += L2_BLOCK_SIZE)
+        {
+          for (int j_block_l2 = 0; j_block_l2 < BLOCK_SIZE; j_block_l2 += L2_BLOCK_SIZE)
+          {
+            for (int k_block_l2 = 0; k_block_l2 < BLOCK_SIZE; k_block_l2 += L2_BLOCK_SIZE)
+            {
+              /* Correct block dimensions if block "goes off edge of" the matrix */
+              int M = min(L2_BLOCK_SIZE, lda - i_block_l2 - i * BLOCK_SIZE);
+              int N = min(L2_BLOCK_SIZE, lda - j_block_l2 - j * BLOCK_SIZE);
+              int K = min(L2_BLOCK_SIZE, lda - k_block_l2 - k * BLOCK_SIZE);
 
-        /* Perform individual block dgemm */
+              /* Perform individual block dgemm */
 #ifdef TRANSPOSE
-        do_block(lda, M, N, K, A + i * lda + k, B + j * lda + k, C + i * lda + j);
+              do_block(lda, M, N, K, A + i * lda + k + i_block_l2 * BLOCK_SIZE  + k_block_l2,\
+               B + j * lda + k + j_block_l2 * BLOCK_SIZE + k_block_l2, C + i * lda + j + i_block_l2 * BLOCK_SIZE + j_block_l2);
 #else
-        do_block(lda, M, N, K, A + i * lda + k, B + k * lda + j, C + i * lda + j);
+              do_block(lda, M, N, K, A + i * lda + k, B + k * lda + j, C + i * lda + j);
 #endif
+            }
+          }
+        }
       }
 #if TRANSPOSE
   for (int i = 0; i < lda; ++i)
