@@ -9,12 +9,14 @@
 
 const char *dgemm_desc = "Simple blocked dgemm.";
 
-#if !defined(BLOCK_SIZE)
-#define BLOCK_SIZE 32
+#if !defined(L1_BLOCK_SIZE)
+#define L1_BLOCK_SIZE 150
 // #define BLOCK_SIZE 719
 #endif
 
-int L2_BLOCK_SIZE = 2;
+#ifndef L2_BLOCK_SIZE
+#define L2_BLOCK_SIZE 32
+#endif
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -58,29 +60,39 @@ void square_dgemm(int lda, double *A, double *B, double *C)
     }
 #endif
   /* For each block-row of A */
-  for (int i = 0; i < lda; i += BLOCK_SIZE)
+  for (int i = 0; i < lda; i += L1_BLOCK_SIZE)
     /* For each block-column of B */
-    for (int j = 0; j < lda; j += BLOCK_SIZE)
+    for (int j = 0; j < lda; j += L1_BLOCK_SIZE)
       /* Accumulate block dgemms into block of C */
-      for (int k = 0; k < lda; k += BLOCK_SIZE)
+      for (int k = 0; k < lda; k += L1_BLOCK_SIZE)
       {
-        for (int i_block_l2 = 0; i_block_l2 < BLOCK_SIZE; i_block_l2 += L2_BLOCK_SIZE)
+        /* Correct block dimensions if L1 block "goes off edge of" the matrix */
+        int M_ = min(L1_BLOCK_SIZE, lda - i);
+        int N_ = min(L1_BLOCK_SIZE, lda - j);
+        int K_ = min(L1_BLOCK_SIZE, lda - k);
+
+        for (int i_block_l2 = 0; i_block_l2 < M_; i_block_l2 += L2_BLOCK_SIZE)
         {
-          for (int j_block_l2 = 0; j_block_l2 < BLOCK_SIZE; j_block_l2 += L2_BLOCK_SIZE)
+          for (int j_block_l2 = 0; j_block_l2 < N_; j_block_l2 += L2_BLOCK_SIZE)
           {
-            for (int k_block_l2 = 0; k_block_l2 < BLOCK_SIZE; k_block_l2 += L2_BLOCK_SIZE)
+            for (int k_block_l2 = 0; k_block_l2 < K_; k_block_l2 += L2_BLOCK_SIZE)
             {
-              /* Correct block dimensions if block "goes off edge of" the matrix */
-              int M = min(L2_BLOCK_SIZE, lda - i_block_l2 - i * BLOCK_SIZE);
-              int N = min(L2_BLOCK_SIZE, lda - j_block_l2 - j * BLOCK_SIZE);
-              int K = min(L2_BLOCK_SIZE, lda - k_block_l2 - k * BLOCK_SIZE);
+              /* Correct block dimensions if L2 block "goes off edge of" the matrix */
+              int M = min(L2_BLOCK_SIZE, M_ - i_block_l2);
+              int N = min(L2_BLOCK_SIZE, N_ - j_block_l2);
+              int K = min(L2_BLOCK_SIZE, K_ - k_block_l2);
 
               /* Perform individual block dgemm */
 #ifdef TRANSPOSE
-              do_block(lda, M, N, K, A + i * lda + k + i_block_l2 * BLOCK_SIZE  + k_block_l2,\
-               B + j * lda + k + j_block_l2 * BLOCK_SIZE + k_block_l2, C + i * lda + j + i_block_l2 * BLOCK_SIZE + j_block_l2);
+              do_block(lda, M, N, K,
+                       A + i * lda + k + i_block_l2 * lda + k_block_l2,
+                       B + j * lda + k + j_block_l2 * lda + k_block_l2,
+                       C + i * lda + j + i_block_l2 * lda + j_block_l2);
 #else
-              do_block(lda, M, N, K, A + i * lda + k, B + k * lda + j, C + i * lda + j);
+              do_block(lda, M, N, K,
+                       A + i * lda + k + i_block_l2 * lda + k_block_l2,
+                       B + k * lda + j + k_block_l2 * lda + j_block_l2,
+                        C + i * lda + j + i_block_l2 * lda + j_block_l2);
 #endif
             }
           }
