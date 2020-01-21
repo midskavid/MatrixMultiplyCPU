@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <malloc.h>
+#include <stdlib.h>
 /*
  *  A simple blocked implementation of matrix multiply
  *  Provided by Jim Demmel at UC Berkeley
@@ -10,12 +12,12 @@
 const char *dgemm_desc = "Simple blocked dgemm.";
 
 #if !defined(L1_BLOCK_SIZE)
-#define L1_BLOCK_SIZE 150
+#define L1_BLOCK_SIZE 300
 // #define BLOCK_SIZE 719
 #endif
 
 #ifndef L2_BLOCK_SIZE
-#define L2_BLOCK_SIZE 32
+#define L2_BLOCK_SIZE 37
 #endif
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
@@ -42,23 +44,59 @@ static void do_block(int lda, int M, int N, int K, double *A, double *B, double 
     }
 }
 
+static void do_block_modified(int lda, int M, int N, int K, double *A, double *B_modified, double *B, double *C)
+{
+
+  // printf("Printing B\n");
+  // for (int i = 0; i < K; i++)
+  // {
+  //   for (int j = 0; j < N; j++)
+  //   {
+  //     printf("%f ", B[i * lda + j]);
+  //   }
+  //   printf("\n");
+  // }
+  // printf("\n==============\n");
+  // printf("Printing B_modified\n");
+  // for (int i = 0; i < K; i++)
+  // {
+  //   for (int j = 0; j < N; j++)
+  //   {
+  //     printf("%f ", B_modified[i * K + j]);
+  //   }
+  //   printf("\n");
+  // }
+  // printf("\n==============\n");
+
+  /* For each row i of A */
+  for (int i = 0; i < M; ++i)
+    /* For each column j of B */
+    for (int j = 0; j < N; ++j)
+    {
+      /* Compute C(i,j) */
+      double cij = C[i * lda + j];
+      for (int k = 0; k < K; ++k)
+      {
+        cij += A[i * lda + k] * B_modified[j * K + k];
+        // if (B_modified[j * K + k] != B[k * lda + j])
+        // {
+        //   printf("Problem with i = %d, j = %d, k = %d!!!\n", i, j, k);
+        //   printf("M = %d, N = %d, K = %d\n", M, N, K);
+        //   exit(0);
+        // }
+      }
+      C[i * lda + j] = cij;
+    }
+}
+
 /* This routine performs a dgemm operation
  *  C := C + A * B
  * where A, B, and C are lda-by-lda matrices stored in row-major order
  * On exit, A and B maintain their input values. */
 void square_dgemm(int lda, double *A, double *B, double *C)
 {
-  // printf("LDA = %d", lda);
+  // printf("LDA = %d\n\n", lda);
   // printf("size of double is %d", sizeof(double));
-#ifdef TRANSPOSE
-  for (int i = 0; i < lda; ++i)
-    for (int j = i + 1; j < lda; ++j)
-    {
-      double t = B[i * lda + j];
-      B[i * lda + j] = B[j * lda + i];
-      B[j * lda + i] = t;
-    }
-#endif
   /* For each block-row of A */
   for (int i = 0; i < lda; i += L1_BLOCK_SIZE)
     /* For each block-column of B */
@@ -75,6 +113,10 @@ void square_dgemm(int lda, double *A, double *B, double *C)
         {
           for (int j_block_l2 = 0; j_block_l2 < N_; j_block_l2 += L2_BLOCK_SIZE)
           {
+
+#ifdef TRANSPOSE
+            double *B_transpose = (double *)malloc(sizeof(double) * L2_BLOCK_SIZE * L2_BLOCK_SIZE);
+#endif
             for (int k_block_l2 = 0; k_block_l2 < K_; k_block_l2 += L2_BLOCK_SIZE)
             {
               /* Correct block dimensions if L2 block "goes off edge of" the matrix */
@@ -84,27 +126,46 @@ void square_dgemm(int lda, double *A, double *B, double *C)
 
               /* Perform individual block dgemm */
 #ifdef TRANSPOSE
-              do_block(lda, M, N, K,
-                       A + i * lda + k + i_block_l2 * lda + k_block_l2,
-                       B + j * lda + k + j_block_l2 * lda + k_block_l2,
-                       C + i * lda + j + i_block_l2 * lda + j_block_l2);
+              // printf("Printing without Transpose:\n");
+              for (int b_i = 0; b_i < L2_BLOCK_SIZE; b_i++)
+              {
+                for (int b_j = 0; b_j < L2_BLOCK_SIZE; b_j++)
+                {
+                  if(b_i < K && b_j < N)
+                    B_transpose[(b_j * L2_BLOCK_SIZE) + b_i] = B[((k + k_block_l2 + b_i) * lda) + j + j_block_l2 + b_j];
+                  else
+                    B_transpose[(b_j * L2_BLOCK_SIZE) + b_i] = 0;
+                  // printf("%f ", B[((k + k_block_l2 + b_i) * lda) + j + j_block_l2 + b_j]) ;
+                }
+                // printf("\n");
+              }
+
+              // printf("\nPrinting With Transpose:\n");
+              // for (int b_i = 0; b_i < K; b_i++)
+              // {
+              //   for (int b_j = 0; b_j < N; b_j++)
+              //   {
+              //     printf("%f ", B_transpose[b_i*K + b_j]);
+              //   }
+              //   printf("\n");
+              // }
+              // printf("===========================\n");
+
+              do_block_modified(lda, M, N, K,
+                                A + i * lda + k + i_block_l2 * lda + k_block_l2,
+                                B_transpose, B + k * lda + j + k_block_l2 * lda + j_block_l2, //B + j * lda + k + j_block_l2 * lda + k_block_l2,
+                                C + i * lda + j + i_block_l2 * lda + j_block_l2);
 #else
               do_block(lda, M, N, K,
                        A + i * lda + k + i_block_l2 * lda + k_block_l2,
                        B + k * lda + j + k_block_l2 * lda + j_block_l2,
-                        C + i * lda + j + i_block_l2 * lda + j_block_l2);
+                       C + i * lda + j + i_block_l2 * lda + j_block_l2);
 #endif
             }
+#ifdef TRANSPOSE
+            free(B_transpose);
+#endif
           }
         }
       }
-#if TRANSPOSE
-  for (int i = 0; i < lda; ++i)
-    for (int j = i + 1; j < lda; ++j)
-    {
-      double t = B[i * lda + j];
-      B[i * lda + j] = B[j * lda + i];
-      B[j * lda + i] = t;
-    }
-#endif
 }
