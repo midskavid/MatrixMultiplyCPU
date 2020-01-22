@@ -12,11 +12,11 @@
 
 
 #if !defined(BLOCK_SIZEL2)
-#define BLOCK_SIZEL2 30
+#define BLOCK_SIZEL2 28
 #endif
 
 #if !defined(BLOCK_SIZEL3)
-#define BLOCK_SIZEL3 400
+#define BLOCK_SIZEL3 395
 #endif
 
 
@@ -29,7 +29,7 @@ static inline void do_block_SIMD(int lda, int M, int N, int K, double* A, double
   register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
   register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C+lda);
 
-  for (int kk=0;kk<4;++kk) {
+  for (int kk=0;kk<K;++kk) {
     register __m256d a0x = _mm256_broadcast_sd(A+kk);
     register __m256d a1x = _mm256_broadcast_sd(A+kk+lda);
 
