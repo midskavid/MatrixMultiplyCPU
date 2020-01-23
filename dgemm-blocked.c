@@ -25,11 +25,36 @@ const char* dgemm_desc = "Simple blocked dgemm.";
 /* This auxiliary subroutine performs a smaller dgemm operation
  *  C := C + A * B using SIMD operations
  * where C is M-by-N, A is M-by-K, and B is K-by-N. */
-static inline void do_block_SIMD(int lda, int M, int N, int K, double* A, double* B, double* C) {
+
+static inline void do_block_SIMD3x4(int lda, double* A, double* B, double* C) {
+  register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
+  register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C+lda);
+  register __m256d c20_c21_c22_c23 = _mm256_loadu_pd(C+2*lda);
+
+  for (int kk=0;kk<4;++kk) {
+    register __m256d a0x = _mm256_broadcast_sd(A+kk);
+    register __m256d a1x = _mm256_broadcast_sd(A+kk+lda);
+    register __m256d a2x = _mm256_broadcast_sd(A+kk+2*lda);
+
+    register __m256d b = _mm256_loadu_pd(B+kk*lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
+  }
+
+  _mm256_storeu_pd (C, c00_c01_c02_c03);
+  _mm256_storeu_pd (C+lda, c10_c11_c12_c13);
+  _mm256_storeu_pd (C+2*lda, c20_c21_c22_c23);
+}
+
+
+
+static inline void do_block_SIMD2x4(int lda, double* A, double* B, double* C) {
   register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
   register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C+lda);
 
-  for (int kk=0;kk<K;++kk) {
+  for (int kk=0;kk<4;++kk) {
     register __m256d a0x = _mm256_broadcast_sd(A+kk);
     register __m256d a1x = _mm256_broadcast_sd(A+kk+lda);
 
@@ -62,18 +87,18 @@ static inline void do_block_naive (int lda, int M, int N, int K, double* A, doub
       C[i*lda+j] = cij;
     }
 }
-#include <stdio.h>
+
 /* This auxiliary subroutine performs a smaller dgemm operation
  *  C := C + A * B
  * where C is M-by-N, A is M-by-K, and B is K-by-N. */
 static inline void do_block (int lda, int M, int N, int K, double* A, double* B, double* C)
 {
   /* For each row i of A */
-  int Malgn = (M/2)*2;
+  int Malgn = (M/3)*3;
   int Nalgn = (N/4)*4;
   int Kalgn = (K/4)*4;
   //printf("%d %d\n", Kalgn, K);
-  for (int i = 0; i < Malgn; i+= 2)
+  for (int i = 0; i < Malgn; i+= 3)
   {
     /* For each column j of B */ 
     for (int j = 0; j < Nalgn; j+= 4) 
@@ -82,9 +107,9 @@ static inline void do_block (int lda, int M, int N, int K, double* A, double* B,
       for (int k = 0; k < Kalgn; k+=4)
       {
 #ifdef TRANSPOSE
-  do_block_SIMD(lda, 2, 4, 4, A + i*lda + k, B + j*lda + k, C + i*lda + j);
+  do_block_SIMD3x4(lda, A + i*lda + k, B + j*lda + k, C + i*lda + j);
 #else
-  do_block_SIMD(lda, 2, 4, 4, A + i*lda + k, B + k*lda + j, C + i*lda + j);
+  do_block_SIMD3x4(lda, A + i*lda + k, B + k*lda + j, C + i*lda + j);
 #endif   
       }
     }
@@ -254,16 +279,16 @@ void square_dgemm (int lda, double* A, double* B, double* C)
       /* Accumulate block dgemms into block of C */
       for (int k = 0; k < lda; k += BLOCK_SIZEL3)
       {
-	/* Correct block dimensions if block "goes off edge of" the matrix */
-	int M = min (BLOCK_SIZEL3, lda-i);
-	int N = min (BLOCK_SIZEL3, lda-j);
-	int K = min (BLOCK_SIZEL3, lda-k);
+    /* Correct block dimensions if block "goes off edge of" the matrix */
+    int M = min (BLOCK_SIZEL3, lda-i);
+    int N = min (BLOCK_SIZEL3, lda-j);
+    int K = min (BLOCK_SIZEL3, lda-k);
 
-	/* Perform individual block dgemm */
+    /* Perform individual block dgemm */
 #ifdef TRANSPOSE
-	do_blockL2(lda, M, N, K, A + i*lda + k, B + j*lda + k, C + i*lda + j);
+    do_blockL2(lda, M, N, K, A + i*lda + k, B + j*lda + k, C + i*lda + j);
 #else
-	do_blockL2(lda, M, N, K, A + i*lda + k, B + k*lda + j, C + i*lda + j);
+    do_blockL2(lda, M, N, K, A + i*lda + k, B + k*lda + j, C + i*lda + j);
 #endif
       }
 #if TRANSPOSE
