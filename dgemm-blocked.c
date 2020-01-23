@@ -26,6 +26,33 @@ const char* dgemm_desc = "Simple blocked dgemm.";
  *  C := C + A * B using SIMD operations
  * where C is M-by-N, A is M-by-K, and B is K-by-N. */
 
+static inline void do_block_SIMD4x4(int lda, double* A, double* B, double* C) {
+  register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
+  register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C+lda);
+  register __m256d c20_c21_c22_c23 = _mm256_loadu_pd(C+2*lda);
+  register __m256d c30_c31_c32_c33 = _mm256_loadu_pd(C+3*lda);
+
+  for (int kk=0;kk<4;++kk) {
+    register __m256d a0x = _mm256_broadcast_sd(A+kk);
+    register __m256d a1x = _mm256_broadcast_sd(A+kk+lda);
+    register __m256d a2x = _mm256_broadcast_sd(A+kk+2*lda);
+    register __m256d a3x = _mm256_broadcast_sd(A+kk+3*lda);
+
+    register __m256d b = _mm256_loadu_pd(B+kk*lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
+    c30_c31_c32_c33 = _mm256_fmadd_pd(a3x, b, c30_c31_c32_c33);
+  }
+
+  _mm256_storeu_pd (C, c00_c01_c02_c03);
+  _mm256_storeu_pd (C+lda, c10_c11_c12_c13);
+  _mm256_storeu_pd (C+2*lda, c20_c21_c22_c23);
+  _mm256_storeu_pd (C+3*lda, c30_c31_c32_c33);
+}
+
+
 static inline void do_block_SIMD3x4(int lda, double* A, double* B, double* C) {
   register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
   register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C+lda);
@@ -94,11 +121,11 @@ static inline void do_block_naive (int lda, int M, int N, int K, double* A, doub
 static inline void do_block (int lda, int M, int N, int K, double* A, double* B, double* C)
 {
   /* For each row i of A */
-  int Malgn = (M/3)*3;
+  int Malgn = (M/4)*4;
   int Nalgn = (N/4)*4;
   int Kalgn = (K/4)*4;
   //printf("%d %d\n", Kalgn, K);
-  for (int i = 0; i < Malgn; i+= 3)
+  for (int i = 0; i < Malgn; i+= 4)
   {
     /* For each column j of B */ 
     for (int j = 0; j < Nalgn; j+= 4) 
@@ -107,9 +134,9 @@ static inline void do_block (int lda, int M, int N, int K, double* A, double* B,
       for (int k = 0; k < Kalgn; k+=4)
       {
 #ifdef TRANSPOSE
-  do_block_SIMD3x4(lda, A + i*lda + k, B + j*lda + k, C + i*lda + j);
+  do_block_SIMD4x4(lda, A + i*lda + k, B + j*lda + k, C + i*lda + j);
 #else
-  do_block_SIMD3x4(lda, A + i*lda + k, B + k*lda + j, C + i*lda + j);
+  do_block_SIMD4x4(lda, A + i*lda + k, B + k*lda + j, C + i*lda + j);
 #endif   
       }
     }
