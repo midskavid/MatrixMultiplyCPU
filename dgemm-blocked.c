@@ -33,7 +33,7 @@ static inline void do_block_SIMD5x4(int lda, double* A, double* B, double* C) {
   register __m256d c20_c21_c22_c23 = _mm256_loadu_pd(C+2*lda);
   register __m256d c30_c31_c32_c33 = _mm256_loadu_pd(C+3*lda);
   register __m256d c40_c41_c42_c43 = _mm256_loadu_pd(C+4*lda);
-
+#if 0
   for (int kk=0;kk<4;++kk) {
     register __m256d a0x = _mm256_broadcast_sd(A+kk);
     register __m256d a1x = _mm256_broadcast_sd(A+kk+lda);
@@ -49,7 +49,64 @@ static inline void do_block_SIMD5x4(int lda, double* A, double* B, double* C) {
     c30_c31_c32_c33 = _mm256_fmadd_pd(a3x, b, c30_c31_c32_c33);
     c40_c41_c42_c43 = _mm256_fmadd_pd(a4x, b, c40_c41_c42_c43);
   }
+#else
+    register __m256d a0x = _mm256_broadcast_sd(A);
+    register __m256d a1x = _mm256_broadcast_sd(A+lda);
+    register __m256d a2x = _mm256_broadcast_sd(A+2*lda);
+    register __m256d a3x = _mm256_broadcast_sd(A+3*lda);
+    register __m256d a4x = _mm256_broadcast_sd(A+4*lda);
 
+    register __m256d b = _mm256_loadu_pd(B);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
+    c30_c31_c32_c33 = _mm256_fmadd_pd(a3x, b, c30_c31_c32_c33);
+    c40_c41_c42_c43 = _mm256_fmadd_pd(a4x, b, c40_c41_c42_c43);
+
+    a0x = _mm256_broadcast_sd(A+1);
+    a1x = _mm256_broadcast_sd(A+1+lda);
+    a2x = _mm256_broadcast_sd(A+1+2*lda);
+    a3x = _mm256_broadcast_sd(A+1+3*lda);
+    a4x = _mm256_broadcast_sd(A+1+4*lda);
+
+    b = _mm256_loadu_pd(B+1*lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
+    c30_c31_c32_c33 = _mm256_fmadd_pd(a3x, b, c30_c31_c32_c33);
+    c40_c41_c42_c43 = _mm256_fmadd_pd(a4x, b, c40_c41_c42_c43);
+
+    a0x = _mm256_broadcast_sd(A+2);
+    a1x = _mm256_broadcast_sd(A+2+lda);
+    a2x = _mm256_broadcast_sd(A+2+2*lda);
+    a3x = _mm256_broadcast_sd(A+2+3*lda);
+    a4x = _mm256_broadcast_sd(A+2+4*lda);
+
+    b = _mm256_loadu_pd(B+2*lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
+    c30_c31_c32_c33 = _mm256_fmadd_pd(a3x, b, c30_c31_c32_c33);
+    c40_c41_c42_c43 = _mm256_fmadd_pd(a4x, b, c40_c41_c42_c43);
+
+    a0x = _mm256_broadcast_sd(A+3);
+    a1x = _mm256_broadcast_sd(A+3+lda);
+    a2x = _mm256_broadcast_sd(A+3+2*lda);
+    a3x = _mm256_broadcast_sd(A+3+3*lda);
+    a4x = _mm256_broadcast_sd(A+3+4*lda);
+
+    b = _mm256_loadu_pd(B+3*lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
+    c30_c31_c32_c33 = _mm256_fmadd_pd(a3x, b, c30_c31_c32_c33);
+    c40_c41_c42_c43 = _mm256_fmadd_pd(a4x, b, c40_c41_c42_c43);
+
+#endif
   _mm256_storeu_pd (C, c00_c01_c02_c03);
   _mm256_storeu_pd (C+lda, c10_c11_c12_c13);
   _mm256_storeu_pd (C+2*lda, c20_c21_c22_c23);
@@ -64,6 +121,7 @@ static inline void do_block_SIMD4x4(int lda, double* A, double* B, double* C) {
   register __m256d c20_c21_c22_c23 = _mm256_loadu_pd(C+2*lda);
   register __m256d c30_c31_c32_c33 = _mm256_loadu_pd(C+3*lda);
 
+#if 0
   for (int kk=0;kk<4;++kk) {
     register __m256d a0x = _mm256_broadcast_sd(A+kk);
     register __m256d a1x = _mm256_broadcast_sd(A+kk+lda);
@@ -77,7 +135,63 @@ static inline void do_block_SIMD4x4(int lda, double* A, double* B, double* C) {
     c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
     c30_c31_c32_c33 = _mm256_fmadd_pd(a3x, b, c30_c31_c32_c33);
   }
+#else
+    register __m256d a0x = _mm256_broadcast_sd(A);
+    register __m256d a1x = _mm256_broadcast_sd(A+lda);
+    register __m256d a2x = _mm256_broadcast_sd(A+2*lda);
+    register __m256d a3x = _mm256_broadcast_sd(A+3*lda);
+    
 
+    register __m256d b = _mm256_loadu_pd(B);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
+    c30_c31_c32_c33 = _mm256_fmadd_pd(a3x, b, c30_c31_c32_c33);
+    
+
+    a0x = _mm256_broadcast_sd(A+1);
+    a1x = _mm256_broadcast_sd(A+1+lda);
+    a2x = _mm256_broadcast_sd(A+1+2*lda);
+    a3x = _mm256_broadcast_sd(A+1+3*lda);
+    
+
+    b = _mm256_loadu_pd(B+1*lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
+    c30_c31_c32_c33 = _mm256_fmadd_pd(a3x, b, c30_c31_c32_c33);
+    
+
+    a0x = _mm256_broadcast_sd(A+2);
+    a1x = _mm256_broadcast_sd(A+2+lda);
+    a2x = _mm256_broadcast_sd(A+2+2*lda);
+    a3x = _mm256_broadcast_sd(A+2+3*lda);
+    
+
+    b = _mm256_loadu_pd(B+2*lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
+    c30_c31_c32_c33 = _mm256_fmadd_pd(a3x, b, c30_c31_c32_c33);
+    
+
+    a0x = _mm256_broadcast_sd(A+3);
+    a1x = _mm256_broadcast_sd(A+3+lda);
+    a2x = _mm256_broadcast_sd(A+3+2*lda);
+    a3x = _mm256_broadcast_sd(A+3+3*lda);
+    
+
+    b = _mm256_loadu_pd(B+3*lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
+    c30_c31_c32_c33 = _mm256_fmadd_pd(a3x, b, c30_c31_c32_c33);
+    
+#endif
   _mm256_storeu_pd (C, c00_c01_c02_c03);
   _mm256_storeu_pd (C+lda, c10_c11_c12_c13);
   _mm256_storeu_pd (C+2*lda, c20_c21_c22_c23);
@@ -90,6 +204,7 @@ static inline void do_block_SIMD3x4(int lda, double* A, double* B, double* C) {
   register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C+lda);
   register __m256d c20_c21_c22_c23 = _mm256_loadu_pd(C+2*lda);
 
+#if 0
   for (int kk=0;kk<4;++kk) {
     register __m256d a0x = _mm256_broadcast_sd(A+kk);
     register __m256d a1x = _mm256_broadcast_sd(A+kk+lda);
@@ -101,7 +216,60 @@ static inline void do_block_SIMD3x4(int lda, double* A, double* B, double* C) {
     c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
     c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
   }
+#else
+    register __m256d a0x = _mm256_broadcast_sd(A);
+    register __m256d a1x = _mm256_broadcast_sd(A+lda);
+    register __m256d a2x = _mm256_broadcast_sd(A+2*lda);
+    
+    register __m256d b = _mm256_loadu_pd(B);
 
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
+    
+
+    a0x = _mm256_broadcast_sd(A+1);
+    a1x = _mm256_broadcast_sd(A+1+lda);
+    a2x = _mm256_broadcast_sd(A+1+2*lda);
+    
+    
+
+    b = _mm256_loadu_pd(B+1*lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
+    
+    
+
+    a0x = _mm256_broadcast_sd(A+2);
+    a1x = _mm256_broadcast_sd(A+2+lda);
+    a2x = _mm256_broadcast_sd(A+2+2*lda);
+    
+    
+
+    b = _mm256_loadu_pd(B+2*lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
+    
+    
+
+    a0x = _mm256_broadcast_sd(A+3);
+    a1x = _mm256_broadcast_sd(A+3+lda);
+    a2x = _mm256_broadcast_sd(A+3+2*lda);
+    
+    
+
+    b = _mm256_loadu_pd(B+3*lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm256_fmadd_pd(a2x, b, c20_c21_c22_c23);
+    
+    
+#endif
   _mm256_storeu_pd (C, c00_c01_c02_c03);
   _mm256_storeu_pd (C+lda, c10_c11_c12_c13);
   _mm256_storeu_pd (C+2*lda, c20_c21_c22_c23);
@@ -112,7 +280,7 @@ static inline void do_block_SIMD3x4(int lda, double* A, double* B, double* C) {
 static inline void do_block_SIMD2x4(int lda, double* A, double* B, double* C) {
   register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
   register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C+lda);
-
+#if 0
   for (int kk=0;kk<4;++kk) {
     register __m256d a0x = _mm256_broadcast_sd(A+kk);
     register __m256d a1x = _mm256_broadcast_sd(A+kk+lda);
@@ -122,7 +290,60 @@ static inline void do_block_SIMD2x4(int lda, double* A, double* B, double* C) {
     c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
     c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
   }
+#else
+    register __m256d a0x = _mm256_broadcast_sd(A);
+    register __m256d a1x = _mm256_broadcast_sd(A+lda);
+    
+    
+    register __m256d b = _mm256_loadu_pd(B);
 
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    
+    
+
+    a0x = _mm256_broadcast_sd(A+1);
+    a1x = _mm256_broadcast_sd(A+1+lda);
+    
+    
+    
+
+    b = _mm256_loadu_pd(B+1*lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    
+    
+    
+
+    a0x = _mm256_broadcast_sd(A+2);
+    a1x = _mm256_broadcast_sd(A+2+lda);
+    
+    
+    
+
+    b = _mm256_loadu_pd(B+2*lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    
+    
+    
+
+    a0x = _mm256_broadcast_sd(A+3);
+    a1x = _mm256_broadcast_sd(A+3+lda);
+    
+    
+    
+
+    b = _mm256_loadu_pd(B+3*lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    
+    
+    
+#endif
   _mm256_storeu_pd (C, c00_c01_c02_c03);
   _mm256_storeu_pd (C+lda, c10_c11_c12_c13);
 }
@@ -173,19 +394,16 @@ static inline void do_block (int lda, int M, int N, int K, double* A, double* B,
       }
     }
   }
-#if 0
-  // // Now block 1 is 
-   do_block_naive(lda, Malgn, Nalgn, K-Kalgn, A+Malgn, B+Kalgn*lda, C);
+#if 0 // Function call adding overhead...
+   do_block_naive(lda, Malgn, Nalgn, K-Kalgn, A+Kalgn, B+Kalgn*lda, C);
    do_block_naive(lda, Malgn, N-Nalgn, Kalgn, A, B+Nalgn, C+Nalgn);
-   do_block_naive(lda, Malgn, N-Nalgn, K-Kalgn, A+Malgn, B+lda*Kalgn+Nalgn, C+Nalgn);
+   do_block_naive(lda, Malgn, N-Nalgn, K-Kalgn, A+Kalgn, B+lda*Kalgn+Nalgn, C+Nalgn);
    do_block_naive(lda, M-Malgn, Nalgn, Kalgn, A+lda*Malgn, B, C+lda*Malgn);
    do_block_naive(lda, M-Malgn, Nalgn, K-Kalgn, A+lda*Malgn+Kalgn, B+lda*Kalgn, C+lda*Malgn);
    do_block_naive(lda, M-Malgn, N-Nalgn, Kalgn, A+lda*Malgn, B+Nalgn, C+lda*Malgn+Nalgn);
    do_block_naive(lda, M-Malgn, N-Nalgn, K-Kalgn, A+lda*Malgn+Kalgn, B+lda*Kalgn+Nalgn, C+lda*Malgn+Nalgn);
 
-
 #else 
-
   for (int i=0;i<Malgn;++i) {
     for (int j=0;j<Nalgn;++j) {
       double cij = C[i*lda+j];
