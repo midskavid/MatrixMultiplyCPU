@@ -42,6 +42,28 @@ static inline void do_block_SIMD(int lda, int M, int N, int K, double *A, double
   _mm256_storeu_pd(C + lda, c10_c11_c12_c13);
 }
 
+/* This auxiliary subroutine performs a smaller dgemm operation
+ *  C := C + A * B using SIMD operations
+ * where C is M-by-N, A is M-by-K, and B is K-by-N. */
+static inline void do_block_SIMD_Transpose(int lda, int M, int N, int K, double *A, double *B, double *C)
+{
+  register __m256d a0x = _mm256_loadu_pd(A);
+  register __m256d a1x = _mm256_loadu_pd(A + lda);
+  __m128i lower = _mm_set_epi32(0xffffffff, 0xffffffff, 0, 0);
+  __m128i higher = _mm_set_epi32(0, 0, 0xffffffff, 0xffffffff);
+
+  for (int mm = 0; mm < M; ++mm)
+  {
+    register __m256d b0m = _mm256_loadu_pd(B + mm * lda);
+    register __m256d c0x_c1x_semi_sum = _mm256_hadd_pd(_mm256_mul_pd(a0x, b0m), _mm256_mul_pd(a1x, b0m));
+    register __m128d semi_sum_high = _mm256_extractf128_pd(c0x_c1x_semi_sum, 1);
+    register __m128d c0x_c1x_sum = _mm_add_pd(semi_sum_high, _mm256_castpd256_pd128(c0x_c1x_semi_sum));
+
+    _mm_maskstore_pd(C + mm, lower, c0x_c1x_sum);
+    _mm_maskstore_pd(C + mm + lda, higher, c0x_c1x_sum);
+  }
+}
+
 static inline void do_block_naive(int lda, int M, int N, int K, double *A, double *B, double *C)
 {
   /* For each row i of A */
