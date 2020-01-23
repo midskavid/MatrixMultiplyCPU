@@ -62,41 +62,150 @@ static inline void do_block_naive (int lda, int M, int N, int K, double* A, doub
       C[i*lda+j] = cij;
     }
 }
-
+#include <stdio.h>
 /* This auxiliary subroutine performs a smaller dgemm operation
  *  C := C + A * B
  * where C is M-by-N, A is M-by-K, and B is K-by-N. */
 static inline void do_block (int lda, int M, int N, int K, double* A, double* B, double* C)
 {
   /* For each row i of A */
-  for (int i = 0; i < M; i+= 2)
+  int Malgn = (M/2)*2;
+  int Nalgn = (N/4)*4;
+  int Kalgn = (K/4)*4;
+  //printf("%d %d\n", Kalgn, K);
+  for (int i = 0; i < Malgn; i+= 2)
+  {
     /* For each column j of B */ 
-    for (int j = 0; j < N; j+= 4) 
+    for (int j = 0; j < Nalgn; j+= 4) 
     {
       /* Compute C(i,j) */
-      for (int k = 0; k < K; k+=4)
+      for (int k = 0; k < Kalgn; k+=4)
       {
-        int M_ = min (2, M-i);
-        int N_ = min (4, N-j);
-        int K_ = min (4, K-k);
-        if (M_==2&&N_==4) 
-        {
 #ifdef TRANSPOSE
-  do_block_SIMD(lda, M_, N_, K_, A + i*lda + k, B + j*lda + k, C + i*lda + j);
+  do_block_SIMD(lda, 2, 4, 4, A + i*lda + k, B + j*lda + k, C + i*lda + j);
 #else
-  do_block_SIMD(lda, M_, N_, K_, A + i*lda + k, B + k*lda + j, C + i*lda + j);
+  do_block_SIMD(lda, 2, 4, 4, A + i*lda + k, B + k*lda + j, C + i*lda + j);
 #endif   
-        }
-        else
-        {
-#ifdef TRANSPOSE
-  do_block_naive(lda, M_, N_, K_, A + i*lda + k, B + j*lda + k, C + i*lda + j);
-#else
-  do_block_naive(lda, M_, N_, K_, A + i*lda + k, B + k*lda + j, C + i*lda + j);
-#endif
-        }
       }
     }
+  }
+#if 0
+  // // Now block 1 is 
+   do_block_naive(lda, Malgn, Nalgn, K-Kalgn, A+Malgn, B+Kalgn*lda, C);
+   do_block_naive(lda, Malgn, N-Nalgn, Kalgn, A, B+Nalgn, C+Nalgn);
+   do_block_naive(lda, Malgn, N-Nalgn, K-Kalgn, A+Malgn, B+lda*Kalgn+Nalgn, C+Nalgn);
+   do_block_naive(lda, M-Malgn, Nalgn, Kalgn, A+lda*Malgn, B, C+lda*Malgn);
+   do_block_naive(lda, M-Malgn, Nalgn, K-Kalgn, A+lda*Malgn+Kalgn, B+lda*Kalgn, C+lda*Malgn);
+   do_block_naive(lda, M-Malgn, N-Nalgn, Kalgn, A+lda*Malgn, B+Nalgn, C+lda*Malgn+Nalgn);
+   do_block_naive(lda, M-Malgn, N-Nalgn, K-Kalgn, A+lda*Malgn+Kalgn, B+lda*Kalgn+Nalgn, C+lda*Malgn+Nalgn);
+
+
+#else 
+
+  for (int i=0;i<Malgn;++i) {
+    for (int j=0;j<Nalgn;++j) {
+      double cij = C[i*lda+j];
+      for (int k=Kalgn;k<K;++k) {
+#ifdef TRANSPOSE
+cij += A[i*lda+k] * B[j*lda+k];
+#else
+cij += A[i*lda+k] * B[k*lda+j];
+#endif
+    C[i*lda+j] = cij;
+      }
+    }
+  }
+
+  for (int i=0;i<Malgn;++i) {
+    for (int j=Nalgn;j<N;++j) {
+      double cij = C[i*lda+j];
+      for (int k=0;k<Kalgn;++k) {
+#ifdef TRANSPOSE
+cij += A[i*lda+k] * B[j*lda+k];
+#else
+cij += A[i*lda+k] * B[k*lda+j];
+#endif
+    C[i*lda+j] = cij;
+      }
+    }
+  }
+
+
+  for (int i=0;i<Malgn;++i) {
+    for (int j=Nalgn;j<N;++j) {
+      double cij = C[i*lda+j];
+      for (int k=Kalgn;k<K;++k) {
+#ifdef TRANSPOSE
+cij += A[i*lda+k] * B[j*lda+k];
+#else
+cij += A[i*lda+k] * B[k*lda+j];
+#endif
+    C[i*lda+j] = cij;
+      }
+    }
+  }
+
+
+  for (int i=Malgn;i<M;++i) {
+    for (int j=0;j<Nalgn;++j) {
+      double cij = C[i*lda+j];
+      for (int k=0;k<Kalgn;++k) {
+#ifdef TRANSPOSE
+cij += A[i*lda+k] * B[j*lda+k];
+#else
+cij += A[i*lda+k] * B[k*lda+j];
+#endif
+    C[i*lda+j] = cij;
+      }
+    }
+  }
+
+  for (int i=Malgn;i<M;++i) {
+    for (int j=0;j<Nalgn;++j) {
+      double cij = C[i*lda+j];
+      for (int k=Kalgn;k<K;++k) {
+#ifdef TRANSPOSE
+cij += A[i*lda+k] * B[j*lda+k];
+#else
+cij += A[i*lda+k] * B[k*lda+j];
+#endif
+    C[i*lda+j] = cij;
+      }
+    }
+  }
+
+
+  for (int i=Malgn;i<M;++i) {
+    for (int j=Nalgn;j<N;++j) {
+      double cij = C[i*lda+j];
+      for (int k=0;k<Kalgn;++k) {
+#ifdef TRANSPOSE
+cij += A[i*lda+k] * B[j*lda+k];
+#else
+cij += A[i*lda+k] * B[k*lda+j];
+#endif
+    C[i*lda+j] = cij;
+      }
+    }
+  }
+
+
+  for (int i=Malgn;i<M;++i) {
+    for (int j=Nalgn;j<N;++j) {
+      double cij = C[i*lda+j];
+      for (int k=Kalgn;k<K;++k) {
+#ifdef TRANSPOSE
+cij += A[i*lda+k] * B[j*lda+k];
+#else
+cij += A[i*lda+k] * B[k*lda+j];
+#endif
+    C[i*lda+j] = cij;
+      }
+    }
+  }
+
+#endif
+
 }
 
 
