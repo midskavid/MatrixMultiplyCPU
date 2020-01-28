@@ -12,11 +12,11 @@
 
 
 #if !defined(BLOCK_SIZEL2)
-#define BLOCK_SIZEL2 40
+#define BLOCK_SIZEL2 128
 #endif
 
 #if !defined(BLOCK_SIZEL3)
-#define BLOCK_SIZEL3 400
+#define BLOCK_SIZEL3 512
 #endif
 
 
@@ -27,7 +27,11 @@ const char* dgemm_desc = "Simple blocked dgemm.";
  * where C is M-by-N, A is M-by-K, and B is K-by-N. */
 
 
-static inline void do_block_SIMD5x4(int lda, double* A, double* B, double* C) {
+static inline void do_block_SIMD5x4(int lda, double* restrict A, double* restrict B, double* restrict C) {
+  A = __builtin_assume_aligned (A, 4);
+  B = __builtin_assume_aligned (B, 4);
+  C = __builtin_assume_aligned (C, 4);
+
   register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
   register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C+lda);
   register __m256d c20_c21_c22_c23 = _mm256_loadu_pd(C+2*lda);
@@ -115,7 +119,12 @@ static inline void do_block_SIMD5x4(int lda, double* A, double* B, double* C) {
 }
 
 
-static inline void do_block_SIMD4x4(int lda, double* A, double* B, double* C) {
+static inline void do_block_SIMD4x4(int lda, double* restrict A, double* restrict B, double* restrict C) {
+  
+  A = __builtin_assume_aligned (A, 4);
+  B = __builtin_assume_aligned (B, 4);
+  C = __builtin_assume_aligned (C, 4);
+
   register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
   register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C+lda);
   register __m256d c20_c21_c22_c23 = _mm256_loadu_pd(C+2*lda);
@@ -373,12 +382,44 @@ static inline void do_block_naive (int lda, int M, int N, int K, double* A, doub
  * where C is M-by-N, A is M-by-K, and B is K-by-N. */
 static inline void do_block (int lda, int M, int N, int K, double* A, double* B, double* C)
 {
+#if 0
+    /* For each row i of A */
+  for (int i = 0; i < M; i+= 4)
+    /* For each column j of B */ 
+    for (int j = 0; j < N; j+= 4) 
+    {
+      /* Compute C(i,j) */
+      for (int k = 0; k < K; k+=4)
+      {
+        int M_ = min (4, M-i);
+        int N_ = min (4, N-j);
+        int K_ = min (4, K-k);
+        if (M_==4&&N_==4)
+        {
+#ifdef TRANSPOSE
+  do_block_SIMD4x4(lda, A + i*lda + k, B + j*lda + k, C + i*lda + j);
+#else
+  do_block_SIMD4x4(lda, A + i*lda + k, B + k*lda + j, C + i*lda + j);
+#endif   
+        }
+        else
+        {
+#ifdef TRANSPOSE
+  do_block_naive(lda, M_, N_, K_, A + i*lda + k, B + j*lda + k, C + i*lda + j);
+#else
+  do_block_naive(lda, M_, N_, K_, A + i*lda + k, B + k*lda + j, C + i*lda + j);
+#endif
+        }
+      }
+    }
+
+#else  
   /* For each row i of A */
-  int Malgn = (M/5)*5;
+  int Malgn = (M/4)*4;
   int Nalgn = (N/4)*4;
   int Kalgn = (K/4)*4;
   //printf("%d %d\n", Kalgn, K);
-  for (int i = 0; i < Malgn; i+= 5)
+  for (int i = 0; i < Malgn; i+= 4)
   {
     /* For each column j of B */ 
     for (int j = 0; j < Nalgn; j+= 4) 
@@ -387,14 +428,14 @@ static inline void do_block (int lda, int M, int N, int K, double* A, double* B,
       for (int k = 0; k < Kalgn; k+=4)
       {
 #ifdef TRANSPOSE
-  do_block_SIMD5x4(lda, A + i*lda + k, B + j*lda + k, C + i*lda + j);
+  do_block_SIMD4x4(lda, A + i*lda + k, B + j*lda + k, C + i*lda + j);
 #else
-  do_block_SIMD5x4(lda, A + i*lda + k, B + k*lda + j, C + i*lda + j);
+  do_block_SIMD4x4(lda, A + i*lda + k, B + k*lda + j, C + i*lda + j);
 #endif   
       }
     }
   }
-#if 0 // Function call adding overhead...
+#if 1 // Function call adding overhead...
    do_block_naive(lda, Malgn, Nalgn, K-Kalgn, A+Kalgn, B+Kalgn*lda, C);
    do_block_naive(lda, Malgn, N-Nalgn, Kalgn, A, B+Nalgn, C+Nalgn);
    do_block_naive(lda, Malgn, N-Nalgn, K-Kalgn, A+Kalgn, B+lda*Kalgn+Nalgn, C+Nalgn);
@@ -507,7 +548,7 @@ cij += A[i*lda+k] * B[k*lda+j];
   }
 
 #endif
-
+#endif
 }
 
 
