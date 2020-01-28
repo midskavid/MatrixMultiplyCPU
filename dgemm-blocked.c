@@ -13,7 +13,7 @@
 
 
 #if !defined(BLOCK_SIZEL2)
-#define BLOCK_SIZEL2 40
+#define BLOCK_SIZEL2 30
 #endif
 
 #if !defined(BLOCK_SIZEL3)
@@ -21,8 +21,8 @@
 #endif
 
 int L2_M = 40;
-int L2_N = 40;
-int L2_K = 40;
+int L2_N = 30;
+int L2_K = 60;
 
 double* A_block;
 double* B_block;
@@ -285,7 +285,6 @@ static inline void helper(int LDA, int i, int j, int k, \
  * Creating a copy of block of B in B_block
  * so as to fit that in L2 completly
  **/
-
 static inline void do_blockL2 (int lda, int M, int N, int K, double* A, double* B, double* C)
 {
   int M__ = (M/L2_M)*L2_M;
@@ -316,8 +315,10 @@ static inline void do_blockL2 (int lda, int M, int N, int K, double* A, double* 
       for (k = 0; k < K__; k += L2_K){
         helper(lda, i, j, k, block_m, block_n, block_k, A, B, C);
         }
-        block_k = K-k;
-        helper(lda, i, j, k, block_m, block_n, block_k, A, B, C);
+        if(k < K){
+          block_k = K-k;
+          helper(lda, i, j, k, block_m, block_n, block_k, A, B, C);
+        }
     }
     
   }
@@ -338,12 +339,12 @@ static inline void do_blockL2 (int lda, int M, int N, int K, double* A, double* 
         
       }
       if(j < N){
-      block_n = N-j;
-      block_k = L2_K;
-      int k = 0;
-      for (k = 0; k < K__; k += L2_K){
-        helper(lda, i, j, k, block_m, block_n, block_k, A, B, C);
-        }
+        block_n = N-j;
+        block_k = L2_K;
+        int k = 0;
+        for (k = 0; k < K__; k += L2_K){
+          helper(lda, i, j, k, block_m, block_n, block_k, A, B, C);
+          }
 
         if(k < K){
           block_k = K-k;
