@@ -24,15 +24,15 @@ int L2_M = 40;
 int L2_N = 40;
 int L2_K = 40;
 
-double* B_block;
 double* A_block;
+double* B_block;
 
 const char* dgemm_desc = "Simple blocked dgemm.";
 
 /* This auxiliary subroutine performs a smaller dgemm operation
  *  C := C + A * B using SIMD operations
  * where C is M-by-N, A is M-by-K, and B is K-by-N. */
-// static inline void do_block_SIMD(int lda, int M, int N, int K, double* A, double* B, double* C) {
+// static  void do_block_SIMD(int lda, int M, int N, int K, double* A, double* B, double* C) {
 //   register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
 //   register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C+lda);
 
@@ -54,7 +54,7 @@ const char* dgemm_desc = "Simple blocked dgemm.";
 /* This auxiliary subroutine performs a smaller dgemm operation
  *  C := C + A * B using SIMD operations
  * where C is M-by-N, A is M-by-K, and B is K-by-N. */
-static inline void do_block_SIMD(int lda, int ldb, int ldc, int M,\
+static  void do_block_SIMD(int lda, int ldb, int ldc, int M,\
  int N, int K, double* A, double* B, double* C) {
   register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
   register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C+ldc);
@@ -74,7 +74,7 @@ static inline void do_block_SIMD(int lda, int ldb, int ldc, int M,\
 }
 
 
-static inline void do_block_SIMD5x4(int lda, int ldb, int ldc, 
+static  void do_block_SIMD5x4(int lda, int ldb, int ldc, 
 int M, int N, int K, double* A, double* B, double* C) {
   register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
   register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C+ldc);
@@ -105,7 +105,7 @@ int M, int N, int K, double* A, double* B, double* C) {
   _mm256_storeu_pd (C+4*ldc, c40_c41_c42_c43);
 }
 
-static inline void do_block_naive (int lda, int M, int N, int K, double* A, double* B, double* C)
+static  void do_block_naive (int lda, int ldb, int ldc, int M, int N, int K, double* A, double* B, double* C)
 {
   /* For each row i of A */
   for (int i = 0; i < M; ++i)
@@ -113,21 +113,41 @@ static inline void do_block_naive (int lda, int M, int N, int K, double* A, doub
     for (int j = 0; j < N; ++j) 
     {
       /* Compute C(i,j) */
-      double cij = C[i*lda+j];
+      double cij = C[i*ldc+j];
       for (int k = 0; k < K; ++k)
 #ifdef TRANSPOSE
   cij += A[i*lda+k] * B[j*lda+k];
 #else
-  cij += A[i*lda+k] * B[k*lda+j];
+  cij += A[i*lda+k] * B[k*ldb+j];
 #endif
-      C[i*lda+j] = cij;
+      C[i*ldc+j] = cij;
     }
 }
+
+
+// static  void do_block_naive (int lda, int M, int N, int K, double* A, double* B, double* C)
+// {
+//   /* For each row i of A */
+//   for (int i = 0; i < M; ++i)
+//     /* For each column j of B */ 
+//     for (int j = 0; j < N; ++j) 
+//     {
+//       /* Compute C(i,j) */
+//       double cij = C[i*lda+j];
+//       for (int k = 0; k < K; ++k)
+// #ifdef TRANSPOSE
+//   cij += A[i*lda+k] * B[j*lda+k];
+// #else
+//   cij += A[i*lda+k] * B[k*lda+j];
+// #endif
+//       C[i*lda+j] = cij;
+//     }
+// }
 
 /* This auxiliary subroutine performs a smaller dgemm operation
  *  C := C + A * B
  * where C is M-by-N, A is M-by-K, and B is K-by-N. */
-// static inline void do_block (int lda, int M, int N, int K, double* A, double* B, double* C)
+// static  void do_block (int lda, int M, int N, int K, double* A, double* B, double* C)
 // {
 //   /* For each row i of A */
 //   for (int i = 0; i < M; i+= 2)
@@ -163,26 +183,26 @@ static inline void do_block_naive (int lda, int M, int N, int K, double* A, doub
 /* This auxiliary subroutine performs a smaller dgemm operation
  *  C := C + A * B
  * where C is M-by-N, A is M-by-K, and B is K-by-N. */
-static inline void do_block_copied(int lda, int ldb, int ldc, int M, int N,\
+static  void do_block_copied(int lda, int ldb, int ldc, int M, int N,\
  int K, double* A, double* B, double* C)
 {
   /* For each row i of A */
-  for (int i = 0; i < M; i+= 2)
+  for (int i = 0; i < M; i+= 5)
     /* For each column j of B */ 
     for (int j = 0; j < N; j+= 4) 
     {
       /* Compute C(i,j) */
       for (int k = 0; k < K; k+=4)
       {
-        int M_ = min (2, M-i);
+        int M_ = min (5, M-i);
         int N_ = min (4, N-j);
         int K_ = min (4, K-k);
-        if (M_==2&&N_==4) 
+        if (M_==5&&N_==4) 
         {
 #ifdef TRANSPOSE
   do_block_SIMD(lda, M_, N_, K_, A + i*lda + k, B + j*lda + k, C + i*lda + j);
 #else
-  do_block_SIMD(lda, ldb, ldc,  M_, N_, K_, A + i*lda + k, B + k*ldb + j, C + i*ldc + j);
+  do_block_SIMD5x4(lda, ldb, ldc, M_, N_, K_, A + i*lda + k, B + k*ldb + j, C + i*ldc + j);
 #endif   
         }
         else
@@ -190,7 +210,7 @@ static inline void do_block_copied(int lda, int ldb, int ldc, int M, int N,\
 #ifdef TRANSPOSE
   do_block_naive(lda, M_, N_, K_, A + i*lda + k, B + j*lda + k, C + i*lda + j);
 #else
-  do_block_naive(lda, M_, N_, K_, A + i*lda + k, B + k*lda + j, C + i*lda + j);
+  do_block_naive(lda, ldb, ldc, M_, N_, K_, A + i*lda + k, B + k*ldb + j, C + i*ldc + j);
 #endif
         }
       }
@@ -198,7 +218,7 @@ static inline void do_block_copied(int lda, int ldb, int ldc, int M, int N,\
 }
 
 
-// static inline void do_blockL2 (int lda, int M, int N, int K, double* A, double* B, double* C)
+// static  void do_blockL2 (int lda, int M, int N, int K, double* A, double* B, double* C)
 // {
 //   /* For each block-row of A */ 
 //   for (int i = 0; i < M; i += BLOCK_SIZEL2)
@@ -222,7 +242,7 @@ static inline void do_block_copied(int lda, int ldb, int ldc, int M, int N,\
 // }
 
 
-static inline void populate_sub(int lda, int M, int N, int row, int col, double* A, double* A_sub){
+static  void populate_sub(int lda, int M, int N, int row, int col, double* A, double* A_sub){
   for(int i = 0; i < M; i++){
     for(int j = 0; j < N; j++){
       A_sub[i*N+j] = A[(row+i)*lda+col+j];
@@ -231,7 +251,7 @@ static inline void populate_sub(int lda, int M, int N, int row, int col, double*
   return;
 }
 
-// static inline void populate_sub_a(int lda, int M, int N, int row, int col, double* A){
+// static  void populate_sub_a(int lda, int M, int N, int row, int col, double* A){
 //   for(int i = 0; i < M; i++){
 //     for(int j = 0; j < N; j++){
 //       A_block[i*N+j] = A[(row+i)*lda+col+j];
@@ -240,7 +260,7 @@ static inline void populate_sub(int lda, int M, int N, int row, int col, double*
 //   return;
 // }
 
-// static inline void populate_sub_b(int lda, int M, int N, int row, int col, double* B){
+// static  void populate_sub_b(int lda, int M, int N, int row, int col, double* B){
 //   for(int i = 0; i < M; i++){
 //     for(int j = 0; j < N; j++){
 //       B_block[i*N+j] = B[(row+i)*lda+col+j];
@@ -248,22 +268,26 @@ static inline void populate_sub(int lda, int M, int N, int row, int col, double*
 //   }
 // }
 
-// static inline void helper(int LDA, int block_m, int block_n, int block_k, \
+// static  void helper(int LDA, int block_m, int block_n, int block_k, \
 //                           int i, int j, int k, )
 
-static inline void do_blockL2 (int lda, int M, int N, int K, double* A, double* B, double* C)
-{
 /**
  * Creating a copy of block of B in B_block
  * so as to fit that in L2 completly
  **/
+
+static  void do_blockL2 (int lda, int M, int N, int K, double* A, double* B, double* C)
+{
   int M__ = (M/L2_M)*L2_M;
   int N__ = (N/L2_N)*L2_N;
   int K__ = (K/L2_K)*L2_K;
-  
+
+  int check_m=0, check_n=0, check_k=0;
+
   int block_m = L2_M;
   int block_n = L2_N;
   int block_k = L2_K;
+
   int i = 0;
   for (i = 0; i < M__; i += L2_M){
     int j = 0;
@@ -282,87 +306,91 @@ static inline void do_blockL2 (int lda, int M, int N, int K, double* A, double* 
            A_block, B_block, C + i*lda + j);
 #endif
       }
-      block_m = L2_M;
-      block_n = L2_N;
-      block_k = K-k;
-      populate_sub(lda, block_m, block_k, i, k, A, A_block);
-      populate_sub(lda, block_k, block_n, k, j, B, B_block);
-      do_block_copied(block_k, block_n, lda,\
-           block_m, block_n, block_k, \
-           A_block, B_block, C + i*lda + j);
-    }
-
-    block_m = L2_M;
-    block_n = N-j;
-    block_k = L2_K;
-    int k = 0;
-    for (k = 0; k < K__; k += L2_K){
-      populate_sub(lda, block_m, block_k, i, k, A, A_block);
-      populate_sub(lda, block_k, block_n, k, j, B, B_block);
-      do_block_copied(block_k, block_n, lda,\
-          block_m, block_n, block_k, \
-          A_block, B_block, C + i*lda + j);
+      if(k < K){
+        block_k = K-k;
+        populate_sub(lda, block_m, block_k, i, k, A, A_block);
+        populate_sub(lda, block_k, block_n, k, j, B, B_block);
+        do_block_copied(block_k, block_n, lda,\
+            block_m, block_n, block_k, \
+            A_block, B_block, C + i*lda + j);
       }
-
-      block_m = L2_M;
+    }
+    if(j < N){
       block_n = N-j;
-      block_k = K-k;
-      populate_sub(lda, block_m, block_k, i, k, A, A_block);
-      populate_sub(lda, block_k, block_n, k, j, B, B_block);
-      do_block_copied(block_k, block_n, lda,\
-          block_m, block_n, block_k, \
-          A_block, B_block, C + i*lda + j);
+      block_k = L2_K;
+      int k = 0;
+      for (k = 0; k < K__; k += L2_K){
+        populate_sub(lda, block_m, block_k, i, k, A, A_block);
+        populate_sub(lda, block_k, block_n, k, j, B, B_block);
+        do_block_copied(block_k, block_n, lda,\
+            block_m, block_n, block_k, \
+            A_block, B_block, C + i*lda + j);
+        }
+
+        block_k = K-k;
+        populate_sub(lda, block_m, block_k, i, k, A, A_block);
+        populate_sub(lda, block_k, block_n, k, j, B, B_block);
+        do_block_copied(block_k, block_n, lda,\
+            block_m, block_n, block_k, \
+            A_block, B_block, C + i*lda + j);
+    }
+    
+  }
+  if(i < M){
+    block_m = M-i;
+    block_n = L2_N;
+    block_k = L2_K;
+    int j = 0;
+    for (j = 0; j < N__; j += L2_N){
+      int k = 0;
+        for (k = 0; k < K__; k += L2_K){
+            populate_sub(lda, block_m, block_k, i, k, A, A_block);
+            populate_sub(lda, block_k, block_n, k, j, B, B_block);
+
+  #ifdef TRANSPOSE
+            do_block(lda, M_, N_, K_, A + i*lda + k, B + j*lda + k, C + i*lda + j);
+  #else
+            do_block_copied(block_k, block_n, lda,\
+            block_m, block_n, block_k, \
+            A_block, B_block, C + i*lda + j);
+  #endif
+        }
+        if(k < K){
+          block_k = K-k;
+          populate_sub(lda, block_m, block_k, i, k, A, A_block);
+          populate_sub(lda, block_k, block_n, k, j, B, B_block);
+          do_block_copied(block_k, block_n, lda,\
+              block_m, block_n, block_k, \
+              A_block, B_block, C + i*lda + j);
+        }
+        
+      }
+      if(j < N){
+
+      block_n = N-j;
+      block_k = L2_K;
+
+      int k = 0;
+      for (k = 0; k < K__; k += L2_K){
+        populate_sub(lda, block_m, block_k, i, k, A, A_block);
+        populate_sub(lda, block_k, block_n, k, j, B, B_block);
+        do_block_copied(block_k, block_n, lda,\
+            block_m, block_n, block_k, \
+            A_block, B_block, C + i*lda + j);
+        }
+
+        if(k < K){
+        block_k = K-k;
+        populate_sub(lda, block_m, block_k, i, k, A, A_block);
+        populate_sub(lda, block_k, block_n, k, j, B, B_block);
+        do_block_copied(block_k, block_n, lda,\
+            block_m, block_n, block_k, \
+            A_block, B_block, C + i*lda + j);
+        }
+      }
   }
 
-//   block_m = M-i;
-//   block_n = L2_N;
-//   block_k = L2_K;
-//   int j = 0;
-//   for (j = 0; j < N__; j += L2_N){
-//     int k = 0;
-//       for (k = 0; k < K__; k += L2_K){
-//           populate_sub(lda, block_m, block_k, i, k, A, A_block);
-//           populate_sub(lda, block_k, block_n, k, j, B, B_block);
 
-// #ifdef TRANSPOSE
-//           do_block(lda, M_, N_, K_, A + i*lda + k, B + j*lda + k, C + i*lda + j);
-// #else
-//           do_block_copied(block_k, block_n, lda,\
-//            block_m, block_n, block_k, \
-//            A_block, B_block, C + i*lda + j);
-// #endif
-//       }
-//       block_m = M-i;
-//       block_n = L2_N;
-//       block_k = K-k;
-//       populate_sub(lda, block_m, block_k, i, k, A, A_block);
-//       populate_sub(lda, block_k, block_n, k, j, B, B_block);
-//       do_block_copied(block_k, block_n, lda,\
-//            block_m, block_n, block_k, \
-//            A_block, B_block, C + i*lda + j);
-//     }
-
-//     block_m = M-i;
-//     block_n = N-j;
-//     block_k = L2_K;
-
-//     int k = 0;
-//     for (k = 0; k < K__; k += L2_K){
-//       populate_sub(lda, block_m, block_k, i, k, A, A_block);
-//       populate_sub(lda, block_k, block_n, k, j, B, B_block);
-//       do_block_copied(block_k, block_n, lda,\
-//           block_m, block_n, block_k, \
-//           A_block, B_block, C + i*lda + j);
-//       }
-
-//       block_m = M-i;
-//       block_n = N-j;
-//       block_k = K-k;
-//       populate_sub(lda, block_m, block_k, i, k, A, A_block);
-//       populate_sub(lda, block_k, block_n, k, j, B, B_block);
-//       do_block_copied(block_k, block_n, lda,\
-//           block_m, block_n, block_k, \
-//           A_block, B_block, C + i*lda + j);
 }
 
 
