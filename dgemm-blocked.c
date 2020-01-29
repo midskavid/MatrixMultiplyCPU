@@ -7,16 +7,27 @@
  */
 #include <immintrin.h>
 #include <avx2intrin.h>
+#include <math.h>
+
 #define min(a,b) (((a)<(b))?(a):(b))
 
 
+#if !defined(BLOCK_SIZEL1)
+#define BLOCK_SIZEL1 128
+#endif
 
 #if !defined(BLOCK_SIZEL2)
-#define BLOCK_SIZEL2 128
+#define BLOCK_SIZEL2 256
 #endif
 
 #if !defined(BLOCK_SIZEL3)
-#define BLOCK_SIZEL3 512
+#define BLOCK_SIZEL3 1024
+#endif
+
+
+
+#if !defined(KERNEL)
+#define KERNEL 8
 #endif
 
 
@@ -80,9 +91,9 @@ const char* dgemm_desc = "Simple blocked dgemm.";
 
 
 static inline void do_block_SIMD8x4(int lda, double* restrict A, double* restrict B, double* restrict C) {
-  A = __builtin_assume_aligned (A, 4);
-  B = __builtin_assume_aligned (B, 4);
-  C = __builtin_assume_aligned (C, 4);
+  // A = __builtin_assume_aligned (A, 8);
+  // B = __builtin_assume_aligned (B, 8);
+  // C = __builtin_assume_aligned (C, 8);
 
   register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
   register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C+lda);
@@ -635,175 +646,39 @@ static inline void do_block_naiveSIMD (int lda, int M, int N, int K, double* A, 
  * where C is M-by-N, A is M-by-K, and B is K-by-N. */
 static inline void do_block (int lda, int M, int N, int K, double* A, double* B, double* C)
 {
-#if 0
-    /* For each row i of A */
-  for (int i = 0; i < M; i+= 4)
+  /* For each row i of A */
+  for (int i = 0; i < M; i+= 8)
+  {
     /* For each column j of B */ 
     for (int j = 0; j < N; j+= 4) 
     {
       /* Compute C(i,j) */
       for (int k = 0; k < K; k+=4)
       {
-        int M_ = min (4, M-i);
-        int N_ = min (4, N-j);
-        int K_ = min (4, K-k);
-        if (M_==4&&N_==4)
-        {
-#ifdef TRANSPOSE
-  do_block_SIMD4x4(lda, A + i*lda + k, B + j*lda + k, C + i*lda + j);
-#else
-  do_block_SIMD4x4(lda, A + i*lda + k, B + k*lda + j, C + i*lda + j);
-#endif   
-        }
-        else
-        {
-#ifdef TRANSPOSE
-  do_block_naive(lda, M_, N_, K_, A + i*lda + k, B + j*lda + k, C + i*lda + j);
-#else
-  do_block_naive(lda, M_, N_, K_, A + i*lda + k, B + k*lda + j, C + i*lda + j);
-#endif
-        }
-      }
-    }
-
-#else  
-  /* For each row i of A */
-  int Malgn = (M/8)*8;
-  int Nalgn = (N/4)*4;
-  int Kalgn = (K/4)*4;
-  //printf("%d %d\n", Kalgn, K);
-  for (int i = 0; i < Malgn; i+= 8)
-  {
-    /* For each column j of B */ 
-    for (int j = 0; j < Nalgn; j+= 4) 
-    {
-      /* Compute C(i,j) */
-      for (int k = 0; k < Kalgn; k+=4)
-      {
-#ifdef TRANSPOSE
-  do_block_SIMD8x4(lda, A + i*lda + k, B + j*lda + k, C + i*lda + j);
-#else
-  do_block_SIMD8x4(lda, A + i*lda + k, B + k*lda + j, C + i*lda + j);
-#endif   
+        do_block_SIMD8x4(lda, A + i*lda + k, B + k*lda + j, C + i*lda + j);
       }
     }
   }
-#if 1 // Function call adding overhead...
-   do_block_naiveSIMD(lda, Malgn, Nalgn, K-Kalgn, A+Kalgn, B+Kalgn*lda, C);
-   do_block_naiveSIMD(lda, Malgn, N-Nalgn, Kalgn, A, B+Nalgn, C+Nalgn);
-   do_block_naiveSIMD(lda, Malgn, N-Nalgn, K-Kalgn, A+Kalgn, B+lda*Kalgn+Nalgn, C+Nalgn);
-   do_block_naiveSIMD(lda, M-Malgn, Nalgn, Kalgn, A+lda*Malgn, B, C+lda*Malgn);
-   do_block_naiveSIMD(lda, M-Malgn, Nalgn, K-Kalgn, A+lda*Malgn+Kalgn, B+lda*Kalgn, C+lda*Malgn);
-   do_block_naiveSIMD(lda, M-Malgn, N-Nalgn, Kalgn, A+lda*Malgn, B+Nalgn, C+lda*Malgn+Nalgn);
-   do_block_naiveSIMD(lda, M-Malgn, N-Nalgn, K-Kalgn, A+lda*Malgn+Kalgn, B+lda*Kalgn+Nalgn, C+lda*Malgn+Nalgn);
-
-#else 
-  for (int i=0;i<Malgn;++i) {
-    for (int j=0;j<Nalgn;++j) {
-      double cij = C[i*lda+j];
-      for (int k=Kalgn;k<K;++k) {
-#ifdef TRANSPOSE
-cij += A[i*lda+k] * B[j*lda+k];
-#else
-cij += A[i*lda+k] * B[k*lda+j];
-#endif
-    C[i*lda+j] = cij;
-      }
-    }
-  }
-
-  for (int i=0;i<Malgn;++i) {
-    for (int j=Nalgn;j<N;++j) {
-      double cij = C[i*lda+j];
-      for (int k=0;k<Kalgn;++k) {
-#ifdef TRANSPOSE
-cij += A[i*lda+k] * B[j*lda+k];
-#else
-cij += A[i*lda+k] * B[k*lda+j];
-#endif
-    C[i*lda+j] = cij;
-      }
-    }
-  }
-
-
-  for (int i=0;i<Malgn;++i) {
-    for (int j=Nalgn;j<N;++j) {
-      double cij = C[i*lda+j];
-      for (int k=Kalgn;k<K;++k) {
-#ifdef TRANSPOSE
-cij += A[i*lda+k] * B[j*lda+k];
-#else
-cij += A[i*lda+k] * B[k*lda+j];
-#endif
-    C[i*lda+j] = cij;
-      }
-    }
-  }
-
-
-  for (int i=Malgn;i<M;++i) {
-    for (int j=0;j<Nalgn;++j) {
-      double cij = C[i*lda+j];
-      for (int k=0;k<Kalgn;++k) {
-#ifdef TRANSPOSE
-cij += A[i*lda+k] * B[j*lda+k];
-#else
-cij += A[i*lda+k] * B[k*lda+j];
-#endif
-    C[i*lda+j] = cij;
-      }
-    }
-  }
-
-  for (int i=Malgn;i<M;++i) {
-    for (int j=0;j<Nalgn;++j) {
-      double cij = C[i*lda+j];
-      for (int k=Kalgn;k<K;++k) {
-#ifdef TRANSPOSE
-cij += A[i*lda+k] * B[j*lda+k];
-#else
-cij += A[i*lda+k] * B[k*lda+j];
-#endif
-    C[i*lda+j] = cij;
-      }
-    }
-  }
-
-
-  for (int i=Malgn;i<M;++i) {
-    for (int j=Nalgn;j<N;++j) {
-      double cij = C[i*lda+j];
-      for (int k=0;k<Kalgn;++k) {
-#ifdef TRANSPOSE
-cij += A[i*lda+k] * B[j*lda+k];
-#else
-cij += A[i*lda+k] * B[k*lda+j];
-#endif
-    C[i*lda+j] = cij;
-      }
-    }
-  }
-
-
-  for (int i=Malgn;i<M;++i) {
-    for (int j=Nalgn;j<N;++j) {
-      double cij = C[i*lda+j];
-      for (int k=Kalgn;k<K;++k) {
-#ifdef TRANSPOSE
-cij += A[i*lda+k] * B[j*lda+k];
-#else
-cij += A[i*lda+k] * B[k*lda+j];
-#endif
-    C[i*lda+j] = cij;
-      }
-    }
-  }
-
-#endif
-#endif
 }
 
+static inline void do_blockL1 (int lda, int M, int N, int K, double* A, double* B, double* C)
+{
+  /* For each block-row of A */ 
+  for (int i = 0; i < M; i += BLOCK_SIZEL1)
+    /* For each block-column of B */
+    for (int j = 0; j < N; j += BLOCK_SIZEL1)
+      /* Accumulate block dgemms into block of C */
+      for (int k = 0; k < K; k += BLOCK_SIZEL1)
+      {
+        /* Correct block dimensions if block "goes off edge of" the matrix */
+        int M_ = min (BLOCK_SIZEL1, M-i);
+        int N_ = min (BLOCK_SIZEL1, N-j);
+        int K_ = min (BLOCK_SIZEL1, K-k);
+
+        /* Perform individual block dgemm */
+        do_block(lda, M_, N_, K_, A + i*lda + k, B + k*lda + j, C + i*lda + j);
+      }
+}
 
 static inline void do_blockL2 (int lda, int M, int N, int K, double* A, double* B, double* C)
 {
@@ -814,20 +689,41 @@ static inline void do_blockL2 (int lda, int M, int N, int K, double* A, double* 
       /* Accumulate block dgemms into block of C */
       for (int k = 0; k < K; k += BLOCK_SIZEL2)
       {
-  /* Correct block dimensions if block "goes off edge of" the matrix */
-  int M_ = min (BLOCK_SIZEL2, M-i);
-  int N_ = min (BLOCK_SIZEL2, N-j);
-  int K_ = min (BLOCK_SIZEL2, K-k);
+        /* Correct block dimensions if block "goes off edge of" the matrix */
+        int M_ = min (BLOCK_SIZEL2, M-i);
+        int N_ = min (BLOCK_SIZEL2, N-j);
+        int K_ = min (BLOCK_SIZEL2, K-k);
 
-  /* Perform individual block dgemm */
-#ifdef TRANSPOSE
-  do_block(lda, M_, N_, K_, A + i*lda + k, B + j*lda + k, C + i*lda + j);
-#else
-  do_block(lda, M_, N_, K_, A + i*lda + k, B + k*lda + j, C + i*lda + j);
-#endif
+        /* Perform individual block dgemm */
+        do_blockL1(lda, M_, N_, K_, A + i*lda + k, B + k*lda + j, C + i*lda + j);
       }
 }
 
+
+static double* PadAndAlign (int lda, double* mOld, int newLda){
+  // int rowNums = ceil((float)lda/row)*row;
+  // int colNums = ceil((float)lda/col)*col;
+  int N = newLda*newLda;
+  double* mNew __attribute__((aligned(32))) = malloc(N * sizeof(double));
+  
+  for (int ii=0;ii<N;++ii) {
+    int rIdx = ii/newLda;
+    int cIdx = ii%newLda;
+    if (rIdx<lda&&cIdx<lda) mNew[ii] = mOld[rIdx*lda+cIdx];
+    else mNew[ii] = 0.0;
+  }
+  return mNew;
+}
+
+static void FillC (int lda, double* Cnew, double* C, int newLda) {
+  int N = newLda*newLda;
+  for (int ii=0;ii<N;++ii) {
+    int rIdx = ii/newLda;
+    int cIdx = ii%newLda;
+    if (rIdx<lda&&cIdx<lda) C[rIdx*lda+cIdx] = Cnew[ii];
+  }
+
+}
 
 /* This routine performs a dgemm operation
  *  C := C + A * B
@@ -835,39 +731,29 @@ static inline void do_blockL2 (int lda, int M, int N, int K, double* A, double* 
  * On exit, A and B maintain their input values. */  
 void square_dgemm (int lda, double* A, double* B, double* C)
 {
-#ifdef TRANSPOSE
-  for (int i = 0; i < lda; ++i)
-    for (int j = i+1; j < lda; ++j) {
-        double t = B[i*lda+j];
-        B[i*lda+j] = B[j*lda+i];
-        B[j*lda+i] = t;
-    }
-#endif
-  /* For each block-row of A */ 
-  for (int i = 0; i < lda; i += BLOCK_SIZEL3)
-    /* For each block-column of B */
-    for (int j = 0; j < lda; j += BLOCK_SIZEL3)
-      /* Accumulate block dgemms into block of C */
-      for (int k = 0; k < lda; k += BLOCK_SIZEL3)
-      {
-    /* Correct block dimensions if block "goes off edge of" the matrix */
-    int M = min (BLOCK_SIZEL3, lda-i);
-    int N = min (BLOCK_SIZEL3, lda-j);
-    int K = min (BLOCK_SIZEL3, lda-k);
+  int newLda = (int)ceilf((float)lda/KERNEL)*KERNEL;
+  double* newA = PadAndAlign(lda, A, newLda);
+  double* newB = PadAndAlign(lda, B, newLda);
+  double* newC = PadAndAlign(lda, C, newLda);
 
-    /* Perform individual block dgemm */
-#ifdef TRANSPOSE
-    do_blockL2(lda, M, N, K, A + i*lda + k, B + j*lda + k, C + i*lda + j);
-#else
-    do_blockL2(lda, M, N, K, A + i*lda + k, B + k*lda + j, C + i*lda + j);
-#endif
+  /* For each block-row of A */ 
+  for (int i = 0; i < newLda; i += BLOCK_SIZEL3)
+    /* For each block-column of B */
+    for (int j = 0; j < newLda; j += BLOCK_SIZEL3)
+      /* Accumulate block dgemms into block of C */
+      for (int k = 0; k < newLda; k += BLOCK_SIZEL3)
+      {
+        /* Correct block dimensions if block "goes off edge of" the matrix */
+        int M = min (BLOCK_SIZEL3, newLda-i);
+        int N = min (BLOCK_SIZEL3, newLda-j);
+        int K = min (BLOCK_SIZEL3, newLda-k);
+
+        /* Perform individual block dgemm */
+        do_blockL2(newLda, M, N, K, newA + i*newLda + k, newB + k*newLda + j, newC + i*newLda + j);
       }
-#if TRANSPOSE
-  for (int i = 0; i < lda; ++i)
-    for (int j = i+1; j < lda; ++j) {
-        double t = B[i*lda+j];
-        B[i*lda+j] = B[j*lda+i];
-        B[j*lda+i] = t;
-    }
-#endif
+
+  FillC(lda, newC, C, newLda);
+  free(newA);
+  free(newB);
+  free(newC);
 }
