@@ -12,9 +12,9 @@
 
 
 
-#if !defined(BLOCK_SIZEL2)
-#define BLOCK_SIZEL2 30
-#endif
+// #if !defined(BLOCK_SIZEL2)
+// #define BLOCK_SIZEL2 40
+// #endif
 
 #if !defined(BLOCK_SIZEL3)
 #define BLOCK_SIZEL3 400
@@ -24,8 +24,14 @@ int L2_M = 40;
 int L2_N = 30;
 int L2_K = 60;
 
-double* A_block;
-double* B_block;
+// int L2_M = 2;
+// int L2_N = 2;
+// int L2_K = 3;
+
+// double* A_block;
+// double* B_block;
+static double A_block[4000];
+static double B_block[4000];
 
 const char* dgemm_desc = "Simple blocked dgemm.";
 
@@ -304,51 +310,40 @@ static inline void do_blockL2 (int lda, int M, int N, int K, double* A, double* 
         helper(lda, i, j, k, block_m, block_n, block_k, A, B, C);
       }
       if(k < K){
-        block_k = K-k;
-        helper(lda, i, j, k, block_m, block_n, block_k, A, B, C);
+        helper(lda, i, j, k, block_m, block_n, K-k, A, B, C);
       }
     }
     if(j < N){
-      block_n = N-j;
-      block_k = L2_K;
       int k = 0;
       for (k = 0; k < K__; k += L2_K){
-        helper(lda, i, j, k, block_m, block_n, block_k, A, B, C);
+        helper(lda, i, j, k, block_m, N-j, block_k, A, B, C);
         }
         if(k < K){
-          block_k = K-k;
-          helper(lda, i, j, k, block_m, block_n, block_k, A, B, C);
+          helper(lda, i, j, k, block_m, N-j, K-k, A, B, C);
         }
     }
     
   }
   if(i < M){
-    block_m = M-i;
-    block_n = L2_N;
-    block_k = L2_K;
     int j = 0;
     for (j = 0; j < N__; j += L2_N){
       int k = 0;
         for (k = 0; k < K__; k += L2_K){
-          helper(lda, i, j, k, block_m, block_n, block_k, A, B, C);
+          helper(lda, i, j, k, M-i, block_n, block_k, A, B, C);
         }
         if(k < K){
-          block_k = K-k;
-          helper(lda, i, j, k, block_m, block_n, block_k, A, B, C);
+          helper(lda, i, j, k, M-i, block_n, K-k, A, B, C);
         }
         
       }
       if(j < N){
-        block_n = N-j;
-        block_k = L2_K;
         int k = 0;
         for (k = 0; k < K__; k += L2_K){
-          helper(lda, i, j, k, block_m, block_n, block_k, A, B, C);
+          helper(lda, i, j, k, M-i, N-j, block_k, A, B, C);
           }
 
         if(k < K){
-          block_k = K-k;
-          helper(lda, i, j, k, block_m, block_n, block_k, A, B, C);
+          helper(lda, i, j, k, M-i, N-j, K-k, A, B, C);
         }
       }
   }
@@ -363,8 +358,9 @@ static inline void do_blockL2 (int lda, int M, int N, int K, double* A, double* 
  * On exit, A and B maintain their input values. */  
 void square_dgemm (int lda, double* A, double* B, double* C)
 {
-  A_block = (double*) malloc (L2_M * L2_K * sizeof(double));
-  B_block = (double*) malloc (L2_K * L2_N * sizeof(double));
+  // printf("Starting for LDA: %d", lda);
+  // A_block = (double*) malloc (L2_M * L2_K * sizeof(double));
+  // B_block = (double*) malloc (L2_K * L2_N * sizeof(double));
 #ifdef TRANSPOSE
   for (int i = 0; i < lda; ++i)
     for (int j = i+1; j < lda; ++j) {
@@ -400,4 +396,6 @@ void square_dgemm (int lda, double* A, double* B, double* C)
         B[j*lda+i] = t;
     }
 #endif
+
+// printf("Exiting for LDA: %d", lda);
 }
