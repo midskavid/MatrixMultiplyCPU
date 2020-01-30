@@ -22,15 +22,15 @@ double *B_L1_CACHED = NULL;
 #endif
 
 #if !defined(L1_N)
-#define L1_N 32
+#define L1_N 16
 #endif
 
 #if !defined(L1_K)
-#define L1_K 32
+#define L1_K 16
 #endif
 
 #if !defined(L2_M)
-#define L2_M 32
+#define L2_M 64
 #endif
 
 #if !defined(L2_N)
@@ -59,9 +59,11 @@ static inline void populate_B_CACHED(int ldb, double *B, double *B_Cached, int M
 {
   for (int i = 0; i < M; i++)
   {
+    int I_N = i * N;
+    int I_LDB = i * ldb;
     for (int j = 0; j < N; j++)
     {
-      B_Cached[i * N + j] = B[i * ldb + j];
+      B_Cached[I_N + j] = B[I_LDB + j];
     }
   }
 }
@@ -292,19 +294,19 @@ static inline void do_block_SIMD8x4(int lda, int ldb, int ldc, double *restrict 
 
   address = C;
   _mm256_storeu_pd(C, c00_c01_c02_c03);
-  address+=ldc;
+  address += ldc;
   _mm256_storeu_pd(address, c10_c11_c12_c13);
-  address+=ldc;
+  address += ldc;
   _mm256_storeu_pd(address, c20_c21_c22_c23);
-  address+=ldc;
+  address += ldc;
   _mm256_storeu_pd(address, c30_c31_c32_c33);
-  address+=ldc;
+  address += ldc;
   _mm256_storeu_pd(address, c40_c41_c42_c43);
-  address+=ldc;
+  address += ldc;
   _mm256_storeu_pd(address, c50_c51_c52_c53);
-  address+=ldc;
+  address += ldc;
   _mm256_storeu_pd(address, c60_c61_c62_c63);
-  address+=ldc;
+  address += ldc;
   _mm256_storeu_pd(address, c70_c71_c72_c73);
 }
 
@@ -349,19 +351,11 @@ static inline void do_block(int lda, int ldb, int ldc, int M, int N, int K, doub
         int K_ = min(4, K - k);
         if (M_ == 2 && N_ == 4)
         {
-#ifdef TRANSPOSE
-          do_block_SIMD(lda, M_, N_, K_, A + i * lda + k, B + j * lda + k, C + i * lda + j);
-#else
           do_block_SIMD(lda, ldb, ldc, M_, N_, K_, I, B + k * ldb + j, C + i * ldc + j);
-#endif
         }
         else
         {
-#ifdef TRANSPOSE
-          do_block_naive(lda, M_, N_, K_, A + i * lda + k, B + j * lda + k, C + i * lda + j);
-#else
           do_block_naive(lda, ldb, ldc, M_, N_, K_, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
-#endif
         }
       }
     }
@@ -382,11 +376,7 @@ static inline void do_block5x4(int lda, int ldb, int ldc, int M, int N, int K, d
       /* Compute C(i,j) */
       for (int k = 0; k < Kalgn; k += 4)
       {
-#ifdef TRANSPOSE
-        do_block_SIMD5x4(lda, A + i * lda + k, B + j * lda + k, C + i * lda + j);
-#else
         do_block_SIMD5x4(lda, ldb, ldc, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
-#endif
       }
     }
   }
@@ -409,11 +399,7 @@ static inline void do_block5x4(int lda, int ldb, int ldc, int M, int N, int K, d
       double cij = C[i * ldc + j];
       for (int k = Kalgn; k < K; ++k)
       {
-#ifdef TRANSPOSE
-        cij += A[i * lda + k] * B[j * lda + k];
-#else
         cij += A[i * lda + k] * B[k * ldb + j];
-#endif
         C[i * ldc + j] = cij;
       }
     }
@@ -426,11 +412,7 @@ static inline void do_block5x4(int lda, int ldb, int ldc, int M, int N, int K, d
       double cij = C[i * ldc + j];
       for (int k = 0; k < Kalgn; ++k)
       {
-#ifdef TRANSPOSE
-        cij += A[i * lda + k] * B[j * lda + k];
-#else
         cij += A[i * lda + k] * B[k * ldb + j];
-#endif
         C[i * ldc + j] = cij;
       }
     }
@@ -443,11 +425,7 @@ static inline void do_block5x4(int lda, int ldb, int ldc, int M, int N, int K, d
       double cij = C[i * ldc + j];
       for (int k = Kalgn; k < K; ++k)
       {
-#ifdef TRANSPOSE
-        cij += A[i * lda + k] * B[j * lda + k];
-#else
         cij += A[i * lda + k] * B[k * ldb + j];
-#endif
         C[i * ldc + j] = cij;
       }
     }
@@ -460,11 +438,7 @@ static inline void do_block5x4(int lda, int ldb, int ldc, int M, int N, int K, d
       double cij = C[i * ldc + j];
       for (int k = 0; k < Kalgn; ++k)
       {
-#ifdef TRANSPOSE
-        cij += A[i * lda + k] * B[j * lda + k];
-#else
         cij += A[i * lda + k] * B[k * ldb + j];
-#endif
         C[i * ldc + j] = cij;
       }
     }
@@ -528,13 +502,17 @@ static inline void do_block8x4(int lda, int ldb, int ldc, int M, int N, int K, d
   /* For each row i of A */
   for (int i = 0; i < M; i += 8)
   {
+    int I_LDA = i * lda;
+    int I_LDC = i*ldc;
     for (int k = 0; k < K; k += 4)
     {
+      int I_LDA_K = I_LDA + k;
+      int K_LDB = k * ldb;
       for (int j = 0; j < N; j += 4)
       {
         /* For each column j of B */
         /* Compute C(i,j) */
-        do_block_SIMD8x4(lda, ldb, ldc, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
+        do_block_SIMD8x4(lda, ldb, ldc, A + I_LDA_K, B + K_LDB + j, C + I_LDC + j);
       }
     }
   }
@@ -544,22 +522,19 @@ static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, do
 {
   for (int k = 0; k < K; k += L1_K)
   {
+    int K_LDB = k * ldb;
     for (int j = 0; j < N; j += L1_N)
     {
-      register int J = k * ldb + j;
+      register int K_LDB_J = K_LDB + j;
 #ifdef ENABLE_L1_CACHING
-      populate_B_CACHED(ldb, B + J, B_L1_CACHED, L1_K, L1_N);
+      populate_B_CACHED(ldb, B + K_LDB_J, B_L1_CACHED, L1_K, L1_N);
 #endif
       for (int i = 0; i < M; i += L1_M)
       {
-#ifdef TRANSPOSE
-        do_block(lda, M_, N_, K_, A + i * lda + k, B + j * ldb + k, C + i * ldc + j);
-#else
 #ifdef ENABLE_L1_CACHING
         do_block8x4(lda, L1_N, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B_L1_CACHED, C + i * ldc + j);
 #else
-        do_block8x4(lda, ldb, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B + J, C + i * ldc + j);
-#endif
+        do_block8x4(lda, ldb, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B + K_LDB_J, C + i * ldc + j);
 #endif
       }
     }
@@ -587,24 +562,21 @@ static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, do
 
 static inline void do_blockL2(int lda, int ldb, int ldc, int M, int N, int K, double *A, double *B, double *C)
 {
-  for (int j = 0; j < N; j += L2_N)
+  for (int k = 0; k < K; k += L2_K)
   {
-    for (int k = 0; k < K; k += L2_K)
+    int K_LDB = k*ldb;
+    for (int j = 0; j < N; j += L2_N)
     {
-      register int J = k * ldb + j;
+      register int J = K_LDB + j;
 #ifdef ENABLE_L2_CACHING
       populate_B_CACHED(ldb, B + J, B_L2_CACHED, L2_K, L2_N);
 #endif
       for (int i = 0; i < M; i += L2_M)
       {
-#ifdef TRANSPOSE
-        do_blockL1(lda, M_, N_, K_, A + i * lda + k, B + j * ldb + k, C + i * ldc + j);
-#else
 #ifdef ENABLE_L2_CACHING
         do_blockL1(lda, L2_N, ldc, L2_M, L2_N, L2_K, A + i * lda + k, B_L2_CACHED, C + i * ldc + j);
 #else
         do_blockL1(lda, ldb, ldc, L2_M, L2_N, L2_K, A + i * lda + k, B + J, C + i * ldc + j);
-#endif
 #endif
       }
     }
@@ -669,45 +641,22 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
     B = pad(ldb, K, N, B_);
     ldb = N;
   }
-#ifdef TRANSPOSE
-  for (int i = 0; i < lda; ++i)
-    for (int j = i + 1; j < lda; ++j)
-    {
-      double t = B[i * lda + j];
-      B[i * lda + j] = B[j * lda + i];
-      B[j * lda + i] = t;
-    }
-#endif
   /* For each block-row of A */
   for (int i = 0; i < M; i += L3_M)
   {
+    int I_LDC = i*ldc;
+    int I_LDA = i*lda;
     for (int k = 0; k < K; k += L3_K)
     {
+      int A_I = I_LDA + k;
+      int K_LDB = k*ldb; 
       for (int j = 0; j < N; j += L3_N)
       {
-        // int N = min(BLOCK_SIZEL3, lda - j);
-        /* Accumulate block dgemms into block of C */
-        /* Correct block dimensions if block "goes off edge of" the matrix */
-        // int K = min(BLOCK_SIZEL3, lda - k);
-
         /* Perform individual block dgemm */
-#ifdef TRANSPOSE
-        do_blockL2(lda, M, N, K, A + i * lda + k, B + j * lda + k, C + i * lda + j);
-#else
-        do_blockL2(lda, ldb, ldc, L3_M, L3_N, L3_K, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
-#endif
+        do_blockL2(lda, ldb, ldc, L3_M, L3_N, L3_K, A + A_I, B + K_LDB + j, C + I_LDC + j);
       }
     }
   }
-#if TRANSPOSE
-  for (int i = 0; i < lda; ++i)
-    for (int j = i + 1; j < lda; ++j)
-    {
-      double t = B[i * lda + j];
-      B[i * lda + j] = B[j * lda + i];
-      B[j * lda + i] = t;
-    }
-#endif
   // free(B_L2_CACHED);
   // B_L1_CACHED = NULL;
   // free(B_L1_CACHED);
