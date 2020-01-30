@@ -9,15 +9,28 @@
 const char *dgemm_desc = "Simple blocked dgemm.";
 
 #if !defined(L2_M)
-#define L2_M 1
+#define L2_M 32
 #endif
 
 #if !defined(L2_N)
-#define L2_N 30
+#define L2_N 1024
 #endif
 
 #if !defined(L2_K)
-#define L2_K 500
+#define L2_K 32
+#endif
+
+
+#if !defined(L1_M)
+#define L1_M 32
+#endif
+
+#if !defined(L1_N)
+#define L1_N 32
+#endif
+
+#if !defined(L1_K)
+#define L1_K 32
 #endif
 
 #if !defined(BLOCK_SIZEL3)
@@ -48,6 +61,30 @@ static void do_block(int lda, int M, int N, int K, double *A, double *B, double 
     }
 }
 
+
+static void do_blockL1(int lda, int M, int N, int K, double *A, double *B, double *C)
+{
+  for (int k = 0; k < K; k += L1_K)
+  {
+    for (int i = 0; i < M; i += L1_M)
+    {
+      for (int j = 0; j < N; j += L1_N)
+      {
+        int M_ = min(L1_M, M - i);
+        int N_ = min(L1_N, N - j);
+        int K_ = min(L1_K, K - k);
+
+#ifdef TRANSPOSE
+        do_block(lda, M_, N_, K_, A + i * lda + k, B + j * lda + k, C + i * lda + j);
+#else
+        do_block(lda, M_, N_, K_, A + i * lda + k, B + k * lda + j, C + i * lda + j);
+#endif
+      }
+    }
+  }
+}
+
+
 static void do_blockL2(int lda, int M, int N, int K, double *A, double *B, double *C)
 {
   for (int k = 0; k < K; k += L2_K)
@@ -61,9 +98,9 @@ static void do_blockL2(int lda, int M, int N, int K, double *A, double *B, doubl
         int K_ = min(L2_K, K - k);
 
 #ifdef TRANSPOSE
-        do_block(lda, M_, N_, K_, A + i * lda + k, B + j * lda + k, C + i * lda + j);
+        do_blockL1(lda, M_, N_, K_, A + i * lda + k, B + j * lda + k, C + i * lda + j);
 #else
-        do_block(lda, M_, N_, K_, A + i * lda + k, B + k * lda + j, C + i * lda + j);
+        do_blockL1(lda, M_, N_, K_, A + i * lda + k, B + k * lda + j, C + i * lda + j);
 #endif
       }
     }
