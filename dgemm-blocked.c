@@ -6,7 +6,13 @@
  *    Support CBLAS interface
  */
 
+#include <immintrin.h>
+#include <avx2intrin.h>
+
 const char *dgemm_desc = "Simple blocked dgemm.";
+
+double buffer[16500];
+double *B_SUB_ALN;
 
 #if !defined(L2_M)
 #define L2_M 32
@@ -19,7 +25,6 @@ const char *dgemm_desc = "Simple blocked dgemm.";
 #if !defined(L2_K)
 #define L2_K 32
 #endif
-
 
 #if !defined(L1_M)
 #define L1_M 32
@@ -40,9 +45,32 @@ const char *dgemm_desc = "Simple blocked dgemm.";
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
 /* This auxiliary subroutine performs a smaller dgemm operation
+ *  C := C + A * B using SIMD operations
+ * where C is M-by-N, A is M-by-K, and B is K-by-N. */
+static inline void do_block_SIMD(int lda, int M, int N, int K, double *A, double *B, double *C)
+{
+  register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
+  register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C + lda);
+
+  for (int kk = 0; kk < K; ++kk)
+  {
+    register __m256d a0x = _mm256_broadcast_sd(A + kk);
+    register __m256d a1x = _mm256_broadcast_sd(A + kk + lda);
+
+    register __m256d b = _mm256_loadu_pd(B + kk * lda);
+
+    c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
+  }
+
+  _mm256_storeu_pd(C, c00_c01_c02_c03);
+  _mm256_storeu_pd(C + lda, c10_c11_c12_c13);
+}
+
+/* This auxiliary subroutine performs a smaller dgemm operation
  *  C := C + A * B
  * where C is M-by-N, A is M-by-K, and B is K-by-N. */
-static void do_block(int lda, int M, int N, int K, double *A, double *B, double *C)
+static void do_block_naive(int lda, int M, int N, int K, double *A, double *B, double *C)
 {
   /* For each row i of A */
   for (int i = 0; i < M; ++i)
@@ -61,14 +89,49 @@ static void do_block(int lda, int M, int N, int K, double *A, double *B, double 
     }
 }
 
-
-static void do_blockL1(int lda, int M, int N, int K, double *A, double *B, double *C)
+/* This auxiliary subroutine performs a smaller dgemm operation
+ *  C := C + A * B
+ * where C is M-by-N, A is M-by-K, and B is K-by-N. */
+static inline void do_block(int lda, int M, int N, int K, double *A, double *B, double *C)
 {
-  for (int k = 0; k < K; k += L1_K)
-  {
-    for (int i = 0; i < M; i += L1_M)
+  /* For each row i of A */
+  for (int i = 0; i < M; i += 2)
+    /* For each column j of B */
+    for (int j = 0; j < N; j += 4)
     {
-      for (int j = 0; j < N; j += L1_N)
+      /* Compute C(i,j) */
+      for (int k = 0; k < K; k += 4)
+      {
+        int M_ = min(2, M - i);
+        int N_ = min(4, N - j);
+        int K_ = min(4, K - k);
+        if (M_ == 2 && N_ == 4)
+        {
+#ifdef TRANSPOSE
+          do_block_SIMD(lda, M_, N_, K_, A + i * lda + k, B + j * lda + k, C + i * lda + j);
+#else
+          do_block_SIMD(lda, M_, N_, K_, A + i * lda + k, B + k * lda + j, C + i * lda + j);
+#endif
+        }
+        else
+        {
+#ifdef TRANSPOSE
+          do_block_naive(lda, M_, N_, K_, A + i * lda + k, B + j * lda + k, C + i * lda + j);
+#else
+          do_block_naive(lda, M_, N_, K_, A + i * lda + k, B + k * lda + j, C + i * lda + j);
+#endif
+        }
+      }
+    }
+}
+
+static inline void do_blockL1(int lda, int M, int N, int K, double *A, double *B, double *C)
+{
+  for (int i = 0; i < M; i += L1_M)
+  {
+    for (int j = 0; j < N; j += L1_N)
+    {
+      for (int k = 0; k < K; k += L1_K)
       {
         int M_ = min(L1_M, M - i);
         int N_ = min(L1_N, N - j);
@@ -84,12 +147,16 @@ static void do_blockL1(int lda, int M, int N, int K, double *A, double *B, doubl
   }
 }
 
+// populate_B_ALGN(double* B, int M , int N){
+//   for(int i = 0; i < )
+// }
 
-static void do_blockL2(int lda, int M, int N, int K, double *A, double *B, double *C)
+static inline void do_blockL2(int lda, int M, int N, int K, double *A, double *B, double *C)
 {
-  for (int k = 0; k < K; k += L2_K)
+  // populate_B_ALGN();
+  for (int i = 0; i < M; i += L2_M)
   {
-    for (int i = 0; i < M; i += L2_M)
+    for (int k = 0; k < K; k += L2_K)
     {
       for (int j = 0; j < N; j += L2_N)
       {
@@ -113,6 +180,7 @@ static void do_blockL2(int lda, int M, int N, int K, double *A, double *B, doubl
  * On exit, A and B maintain their input values. */
 void square_dgemm(int lda, double *A, double *B, double *C)
 {
+  B_SUB_ALN = buffer + 64 - ((int)&buffer) % 64;
 #ifdef TRANSPOSE
   for (int i = 0; i < lda; ++i)
     for (int j = i + 1; j < lda; ++j)
