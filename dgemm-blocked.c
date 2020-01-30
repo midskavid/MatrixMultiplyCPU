@@ -15,7 +15,8 @@ const char *dgemm_desc = "Simple blocked dgemm.";
 // double buffer[16500];
 double *B_SUB_ALGN;
 
-double *B_L2_CACHED;
+double *B_L2_CACHED = NULL;
+double *B_L1_CACHED = NULL;
 
 #if !defined(L2_M)
 #define L2_M 64
@@ -46,6 +47,17 @@ double *B_L2_CACHED;
 #endif
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
+
+static inline void populate_B_CACHED(int ldb, double *B, double *B_Cached, int M, int N)
+{
+  for (int i = 0; i < M; i++)
+  {
+    for (int j = 0; j < N; j++)
+    {
+      B_Cached[i * N + j] = B[i * ldb + j];
+    }
+  }
+}
 
 /* This auxiliary subroutine performs a smaller dgemm operation
  *  C := C + A * B using SIMD operations
@@ -325,10 +337,11 @@ static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, do
     {
       for (int j = 0; j < N; j += L1_N)
       {
+        populate_B_CACHED(ldb, B + k * ldb + j, B_L1_CACHED, L1_K, L1_N);
 #ifdef TRANSPOSE
         do_block(lda, M_, N_, K_, A + i * lda + k, B + j * ldb + k, C + i * ldc + j);
 #else
-        do_block(lda, ldb, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
+        do_block(lda, L1_N, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B_L1_CACHED, C + i * ldc + j);
 #endif
       }
     }
@@ -354,24 +367,13 @@ static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, do
 //   }
 // }
 
-static inline void populate_B_CACHED(int ldb, double *B, int M, int N)
-{
-  for (int i = 0; i < M; i++)
-  {
-    for (int j = 0; j < N; j++)
-    {
-      B_L2_CACHED[i * N + j] = B[i * ldb + j];
-    }
-  }
-}
-
 static inline void do_blockL2(int lda, int ldb, int ldc, int M, int N, int K, double *A, double *B, double *C)
 {
   for (int k = 0; k < K; k += L2_K)
   {
     for (int j = 0; j < N; j += L2_N)
     {
-      populate_B_CACHED(ldb, B + k * ldb + j, L2_K, L2_N);
+      populate_B_CACHED(ldb, B + k * ldb + j, B_L2_CACHED, L2_K, L2_N);
       for (int i = 0; i < M; i += L2_M)
       {
 #ifdef TRANSPOSE
@@ -413,7 +415,11 @@ static double *pad(int lda, int N, double *A)
 void square_dgemm(int LD, double *A_, double *B_, double *C)
 {
   // B_L2_CACHED = buffer + 64 - ((int)&buffer) % 64;
-  B_L2_CACHED = (double *) aligned_alloc(64, 8200 * sizeof(double));
+  if(B_L2_CACHED == NULL)
+    B_L2_CACHED = (double *) aligned_alloc(64, 8200 * sizeof(double));
+  if(B_L1_CACHED == NULL)
+    B_L1_CACHED = (double *) aligned_alloc(64, 5000*sizeof(double));
+
   double *A = A_;
   double *B = B_;
   int lda = LD;
@@ -468,7 +474,8 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
       B[j * lda + i] = t;
     }
 #endif
-  free(B_L2_CACHED);
+  // free(B_L2_CACHED);
+  // free(B_L1_CACHED);
   if (A != A_)
   {
     free(A);
