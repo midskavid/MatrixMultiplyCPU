@@ -8,8 +8,16 @@
 
 const char *dgemm_desc = "Simple blocked dgemm.";
 
-#if !defined(BLOCK_SIZEL2)
-#define BLOCK_SIZEL2 8
+#if !defined(L2_M)
+#define L2_M 1
+#endif
+
+#if !defined(L2_N)
+#define L2_N 30
+#endif
+
+#if !defined(L2_K)
+#define L2_K 500
 #endif
 
 #if !defined(BLOCK_SIZEL3)
@@ -42,25 +50,24 @@ static void do_block(int lda, int M, int N, int K, double *A, double *B, double 
 
 static void do_blockL2(int lda, int M, int N, int K, double *A, double *B, double *C)
 {
-  /* For each block-row of A */
-  for (int i = 0; i < M; i += BLOCK_SIZEL2)
-    /* For each block-column of B */
-    for (int j = 0; j < N; j += BLOCK_SIZEL2)
-      /* Accumulate block dgemms into block of C */
-      for (int k = 0; k < K; k += BLOCK_SIZEL2)
+  for (int k = 0; k < K; k += L2_K)
+  {
+    for (int i = 0; i < M; i += L2_M)
+    {
+      for (int j = 0; j < N; j += L2_N)
       {
-        /* Correct block dimensions if block "goes off edge of" the matrix */
-        int M_ = min(BLOCK_SIZEL2, M - i);
-        int N_ = min(BLOCK_SIZEL2, N - j);
-        int K_ = min(BLOCK_SIZEL2, K - k);
+        int M_ = min(L2_M, M - i);
+        int N_ = min(L2_N, N - j);
+        int K_ = min(L2_K, K - k);
 
-        /* Perform individual block dgemm */
 #ifdef TRANSPOSE
         do_block(lda, M_, N_, K_, A + i * lda + k, B + j * lda + k, C + i * lda + j);
 #else
         do_block(lda, M_, N_, K_, A + i * lda + k, B + k * lda + j, C + i * lda + j);
 #endif
       }
+    }
+  }
 }
 
 /* This routine performs a dgemm operation
