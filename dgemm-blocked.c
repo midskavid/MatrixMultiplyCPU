@@ -11,7 +11,7 @@
 
 const char *dgemm_desc = "Simple blocked dgemm.";
 
-double buffer[16500];
+// double buffer[16500];
 double *B_SUB_ALGN;
 
 double *B_L2_CACHED;
@@ -419,7 +419,8 @@ static double *pad(int lda, int N, double *A)
  * On exit, A and B maintain their input values. */
 void square_dgemm(int LD, double *A_, double *B_, double *C)
 {
-  B_L2_CACHED = buffer + 64 - ((int)&buffer) % 64;
+  // B_L2_CACHED = buffer + 64 - ((int)&buffer) % 64;
+  B_L2_CACHED = aligned_alloc(64, 5000*sizeof(double));
   double *A = A_;
   double *B = B_;
   int lda = LD;
