@@ -22,15 +22,15 @@ double *B_L1_CACHED = NULL;
 #endif
 
 #if !defined(L1_N)
-#define L1_N 64
+#define L1_N 32
 #endif
 
 #if !defined(L1_K)
-#define L1_K 32
+#define L1_K 64
 #endif
 
 #if !defined(L2_M)
-#define L2_M 32
+#define L2_M 64
 #endif
 
 #if !defined(L2_N)
@@ -123,9 +123,9 @@ static inline void do_block_SIMD5x4(int lda, int ldb, int ldc, double *A, double
 
 static inline void do_block_SIMD8x4(int lda, int ldb, int ldc, double *restrict A, double *restrict B, double *restrict C)
 {
-  // A = __builtin_assume_aligned (A, 8);
-  // B = __builtin_assume_aligned (B, 8);
-  // C = __builtin_assume_aligned (C, 8);
+  A = __builtin_assume_aligned(A, 16);
+  B = __builtin_assume_aligned(B, 16);
+  C = __builtin_assume_aligned(C, 16);
 
   register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
   register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C + ldc);
@@ -459,12 +459,12 @@ static inline void do_block8x4(int lda, int ldb, int ldc, int M, int N, int K, d
   /* For each row i of A */
   for (int i = 0; i < M; i += 8)
   {
-    /* For each column j of B */
-    /* Compute C(i,j) */
     for (int k = 0; k < K; k += 4)
     {
       for (int j = 0; j < N; j += 4)
       {
+        /* For each column j of B */
+        /* Compute C(i,j) */
         do_block_SIMD8x4(lda, ldb, ldc, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
       }
     }
@@ -473,15 +473,15 @@ static inline void do_block8x4(int lda, int ldb, int ldc, int M, int N, int K, d
 
 static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, double *A, double *B, double *C)
 {
-  for (int i = 0; i < M; i += L1_M)
+  for (int k = 0; k < K; k += L1_K)
   {
-    for (int k = 0; k < K; k += L1_K)
+    for (int j = 0; j < N; j += L1_N)
     {
-      for (int j = 0; j < N; j += L1_N)
-      {
 #ifdef ENABLE_L1_CACHING
-        populate_B_CACHED(ldb, B + k * ldb + j, B_L1_CACHED, L1_K, L1_N);
+      populate_B_CACHED(ldb, B + k * ldb + j, B_L1_CACHED, L1_K, L1_N);
 #endif
+      for (int i = 0; i < M; i += L1_M)
+      {
 #ifdef TRANSPOSE
         do_block(lda, M_, N_, K_, A + i * lda + k, B + j * ldb + k, C + i * ldc + j);
 #else
@@ -517,15 +517,15 @@ static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, do
 
 static inline void do_blockL2(int lda, int ldb, int ldc, int M, int N, int K, double *A, double *B, double *C)
 {
-  for (int i = 0; i < M; i += L2_M)
+  for (int j = 0; j < N; j += L2_N)
   {
     for (int k = 0; k < K; k += L2_K)
     {
-      for (int j = 0; j < N; j += L2_N)
-      {
 #ifdef ENABLE_L2_CACHING
-        populate_B_CACHED(ldb, B + k * ldb + j, B_L2_CACHED, L2_K, L2_N);
+      populate_B_CACHED(ldb, B + k * ldb + j, B_L2_CACHED, L2_K, L2_N);
 #endif
+      for (int i = 0; i < M; i += L2_M)
+      {
 #ifdef TRANSPOSE
         do_blockL1(lda, M_, N_, K_, A + i * lda + k, B + j * ldb + k, C + i * ldc + j);
 #else
@@ -573,9 +573,9 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
 {
   // B_L2_CACHED = buffer + 64 - ((int)&buffer) % 64;
   if (B_L2_CACHED == NULL)
-    B_L2_CACHED = (double *)aligned_alloc(64, 8200 * sizeof(double));
+    B_L2_CACHED = (double *)aligned_alloc(64, 10240 * sizeof(double));
   if (B_L1_CACHED == NULL)
-    B_L1_CACHED = (double *)aligned_alloc(64, 5000 * sizeof(double));
+    B_L1_CACHED = (double *)aligned_alloc(64, 10240 * sizeof(double));
 
   double *A = A_;
   double *B = B_;
@@ -638,7 +638,9 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
     }
 #endif
   // free(B_L2_CACHED);
+  // B_L1_CACHED = NULL;
   // free(B_L1_CACHED);
+  // B_L2_CACHED = NULL;
   if (A != A_)
     free(A);
   if (B != B_)
