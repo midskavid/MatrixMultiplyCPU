@@ -12,38 +12,45 @@
 
 const char *dgemm_desc = "Simple blocked dgemm.";
 
-// double buffer[16500];
 double *B_SUB_ALGN;
 
 double *B_L2_CACHED = NULL;
 double *B_L1_CACHED = NULL;
 
-#if !defined(L2_M)
-#define L2_M 64
-#endif
-
-#if !defined(L2_N)
-#define L2_N 64
-#endif
-
-#if !defined(L2_K)
-#define L2_K 64
-#endif
-
 #if !defined(L1_M)
-#define L1_M 64
+#define L1_M 32
 #endif
 
 #if !defined(L1_N)
-#define L1_N 64
+#define L1_N 32
 #endif
 
 #if !defined(L1_K)
-#define L1_K 64
+#define L1_K 32
 #endif
 
-#if !defined(BLOCK_SIZEL3)
-#define BLOCK_SIZEL3 64
+#if !defined(L2_M)
+#define L2_M 32
+#endif
+
+#if !defined(L2_N)
+#define L2_N 32
+#endif
+
+#if !defined(L2_K)
+#define L2_K 32
+#endif
+
+#if !defined(L3_M)
+#define L3_M 64
+#endif
+
+#if !defined(L3_N)
+#define L3_N 256
+#endif
+
+#if !defined(L3_K)
+#define L3_K 128
 #endif
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
@@ -336,11 +343,17 @@ static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, do
     {
       for (int j = 0; j < N; j += L1_N)
       {
+#ifdef ENABLE_L1_CACHING
         populate_B_CACHED(ldb, B + k * ldb + j, B_L1_CACHED, L1_K, L1_N);
+#endif
 #ifdef TRANSPOSE
         do_block(lda, M_, N_, K_, A + i * lda + k, B + j * ldb + k, C + i * ldc + j);
 #else
-        do_block5x4(lda, L1_N, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B_L1_CACHED, C + i * ldc + j);
+#ifdef ENABLE_L1_CACHING
+        do_block(lda, L1_N, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B_L1_CACHED, C + i * ldc + j);
+#else
+        do_block(lda, ldb, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B + j * ldb + k, C + i * ldc + j);
+#endif
 #endif
       }
     }
@@ -368,26 +381,32 @@ static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, do
 
 static inline void do_blockL2(int lda, int ldb, int ldc, int M, int N, int K, double *A, double *B, double *C)
 {
-  for (int k = 0; k < K; k += L2_K)
+  for (int i = 0; i < M; i += L2_M)
   {
-    for (int j = 0; j < N; j += L2_N)
+    for (int k = 0; k < K; k += L2_K)
     {
-      populate_B_CACHED(ldb, B + k * ldb + j, B_L2_CACHED, L2_K, L2_N);
-      for (int i = 0; i < M; i += L2_M)
+      for (int j = 0; j < N; j += L2_N)
       {
+#ifdef ENABLE_L2_CACHING
+        populate_B_CACHED(ldb, B + k * ldb + j, B_L2_CACHED, L2_K, L2_N);
+#endif
 #ifdef TRANSPOSE
         do_blockL1(lda, M_, N_, K_, A + i * lda + k, B + j * ldb + k, C + i * ldc + j);
 #else
+#ifdef ENABLE_L2_CACHING
         do_blockL1(lda, L2_N, ldc, L2_M, L2_N, L2_K, A + i * lda + k, B_L2_CACHED, C + i * ldc + j);
+#else
+        do_blockL1(lda, ldb, ldc, L2_M, L2_N, L2_K, A + i * lda + k, B + j * ldb + k, C + i * ldc + j);
+#endif
 #endif
       }
     }
   }
 }
 
-static double *pad(int lda, int N, double *A)
+static double *pad(int lda, int M, int N, double *A)
 {
-  double *newA = malloc(N * N * sizeof(double));
+  double *newA = malloc(M * N * sizeof(double));
   int i = 0, j = 0;
   for (i = 0; i < lda; i++)
   {
@@ -400,9 +419,13 @@ static double *pad(int lda, int N, double *A)
       newA[i * N + j] = 0;
     }
   }
-  for (; i < N; i++)
+  for (; i < M; i++)
   {
-    newA[i * N + j] = 0;
+    for (j = 0; j < N; j++)
+    {
+      newA[i * N + j] = 0;
+    }
+    
   }
   return newA;
 }
@@ -424,13 +447,21 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
   int lda = LD;
   int ldb = LD;
   int ldc = LD;
-  if (LD % BLOCK_SIZEL3 != 0)
+  int M = LD, N = LD, K = LD;
+  if ((LD % L3_M != 0) || (LD % L3_K != 0))
   {
-    int L = ((LD / BLOCK_SIZEL3) * BLOCK_SIZEL3) + BLOCK_SIZEL3;
-    A = pad(lda, L, A_);
-    B = pad(lda, L, B_);
-    lda = L;
-    ldb = L;
+    M = ((LD / L3_M) * L3_M) + L3_M;
+    K = ((LD / L3_K) * L3_K) + L3_K;
+    A = pad(lda, M, K, A_);
+    lda = K;
+  }
+
+  if ((LD % L3_K != 0) || (LD % L3_N != 0))
+  {
+    K = ((LD / L3_K) * L3_K) + L3_K;
+    N = ((LD / L3_N) * L3_N) + L3_N;
+    B = pad(ldb, K, N, B_);
+    ldb = N;
   }
 #ifdef TRANSPOSE
   for (int i = 0; i < lda; ++i)
@@ -442,24 +473,22 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
     }
 #endif
   /* For each block-row of A */
-  for (int i = 0; i < lda; i += BLOCK_SIZEL3)
+  for (int i = 0; i < M; i += L3_M)
   {
-    int M = min(BLOCK_SIZEL3, lda - i);
-    /* For each block-column of B */
-    for (int j = 0; j < lda; j += BLOCK_SIZEL3)
+    for (int k = 0; k < K; k += L3_K)
     {
-      int N = min(BLOCK_SIZEL3, lda - j);
-      /* Accumulate block dgemms into block of C */
-      for (int k = 0; k < lda; k += BLOCK_SIZEL3)
+      for (int j = 0; j < N; j += L3_N)
       {
+        // int N = min(BLOCK_SIZEL3, lda - j);
+        /* Accumulate block dgemms into block of C */
         /* Correct block dimensions if block "goes off edge of" the matrix */
-        int K = min(BLOCK_SIZEL3, lda - k);
+        // int K = min(BLOCK_SIZEL3, lda - k);
 
         /* Perform individual block dgemm */
 #ifdef TRANSPOSE
         do_blockL2(lda, M, N, K, A + i * lda + k, B + j * lda + k, C + i * lda + j);
 #else
-        do_blockL2(lda, ldb, ldc, M, N, K, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
+        do_blockL2(lda, ldb, ldc, L3_M, L3_N, L3_K, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
 #endif
       }
     }
@@ -476,9 +505,8 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
   // free(B_L2_CACHED);
   // free(B_L1_CACHED);
   if (A != A_)
-  {
     free(A);
+  if (B != B_)
     free(B);
-  }
   return;
 }
