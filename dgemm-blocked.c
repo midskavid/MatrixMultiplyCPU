@@ -383,7 +383,7 @@ static inline void do_blockL2(int lda, int ldb , int ldc, int M, int N, int K, d
 static double *pad(int lda, int N, double *A)
 {
   double *newA = malloc(N * N * sizeof(double));
-  int i, j;
+  int i = 0, j = 0;
   for (i = 0; i < lda; i++)
   {
     for (j = 0; j < lda; j++)
@@ -413,14 +413,14 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
   int lda = LD;
   int ldb = LD;
   int ldc = LD;
-  // if (LD % BLOCK_SIZEL3 != 0)
-  // {
-  //   int L = (LD / BLOCK_SIZEL3) * BLOCK_SIZEL3 + BLOCK_SIZEL3;
-  //   A = pad(lda, L, A_);
-  //   B = pad(lda, L, B_);
-  //   lda = L;
-  //   ldb = L;
-  // }
+  if (LD % BLOCK_SIZEL3 != 0)
+  {
+    int L = ((LD / BLOCK_SIZEL3) * BLOCK_SIZEL3) + BLOCK_SIZEL3;
+    A = pad(lda, L, A_);
+    B = pad(lda, L, B_);
+    lda = L;
+    ldb = L;
+  }
   // B_SUB_ALGN = buffer + 64 - ((int)&buffer) % 64;
 #ifdef TRANSPOSE
   for (int i = 0; i < lda; ++i)
@@ -436,11 +436,11 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
   {
     int M = min(BLOCK_SIZEL3, lda - i);
     /* For each block-column of B */
-    for (int j = 0; j < ldb; j += BLOCK_SIZEL3)
+    for (int j = 0; j < lda; j += BLOCK_SIZEL3)
     {
       int N = min(BLOCK_SIZEL3, lda - j);
       /* Accumulate block dgemms into block of C */
-      for (int k = 0; k < ldc; k += BLOCK_SIZEL3)
+      for (int k = 0; k < lda; k += BLOCK_SIZEL3)
       {
         /* Correct block dimensions if block "goes off edge of" the matrix */
         int K = min(BLOCK_SIZEL3, lda - k);
@@ -449,7 +449,7 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
 #ifdef TRANSPOSE
         do_blockL2(lda, M, N, K, A + i * lda + k, B + j * lda + k, C + i * lda + j);
 #else
-        do_blockL2(lda, ldb, ldc, M, N, K, A + i * lda + k, B + k * lda + j, C + i * lda + j);
+        do_blockL2(lda, ldb, ldc, M, N, K, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
 #endif
       }
     }
