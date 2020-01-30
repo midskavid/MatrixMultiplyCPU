@@ -320,18 +320,14 @@ static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, do
 {
   for (int i = 0; i < M; i += L1_M)
   {
-    int M_ = min(L1_M, M - i);
     for (int k = 0; k < K; k += L1_K)
     {
-      int K_ = min(L1_K, K - k);
       for (int j = 0; j < N; j += L1_N)
       {
-        int N_ = min(L1_N, N - j);
-
 #ifdef TRANSPOSE
         do_block(lda, M_, N_, K_, A + i * lda + k, B + j * ldb + k, C + i * ldc + j);
 #else
-        do_block(lda, ldb, ldc, M_, N_, K_, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
+        do_block(lda, ldb, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
 #endif
       }
     }
@@ -372,19 +368,15 @@ static inline void do_blockL2(int lda, int ldb, int ldc, int M, int N, int K, do
 {
   for (int k = 0; k < K; k += L2_K)
   {
-    int K_ = min(L2_K, K - k);
     for (int j = 0; j < N; j += L2_N)
     {
-      int N_ = min(L2_N, N - j);
       populate_B_CACHED(ldb, B + k * ldb + j, L2_K, L2_N);
       for (int i = 0; i < M; i += L2_M)
       {
-        int M_ = min(L2_M, M - i);
-
 #ifdef TRANSPOSE
         do_blockL1(lda, M_, N_, K_, A + i * lda + k, B + j * ldb + k, C + i * ldc + j);
 #else
-        do_blockL1(lda, L2_N, ldc, M_, N_, K_, A + i * lda + k, B_L2_CACHED, C + i * ldc + j);
+        do_blockL1(lda, L2_N, ldc, L2_M, L2_N, L2_K, A + i * lda + k, B_L2_CACHED, C + i * ldc + j);
 #endif
       }
     }
