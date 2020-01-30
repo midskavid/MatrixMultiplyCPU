@@ -8,6 +8,7 @@
 
 #include <immintrin.h>
 #include <avx2intrin.h>
+#include <stdlib.h>
 
 const char *dgemm_desc = "Simple blocked dgemm.";
 
@@ -29,7 +30,7 @@ double *B_L2_CACHED;
 #endif
 
 #if !defined(L1_M)
-#define L1_M 32
+#define L1_M 64
 #endif
 
 #if !defined(L1_N)
@@ -37,11 +38,11 @@ double *B_L2_CACHED;
 #endif
 
 #if !defined(L1_K)
-#define L1_K 32
+#define L1_K 64
 #endif
 
 #if !defined(BLOCK_SIZEL3)
-#define BLOCK_SIZEL3 128
+#define BLOCK_SIZEL3 64
 #endif
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
@@ -412,7 +413,7 @@ static double *pad(int lda, int N, double *A)
 void square_dgemm(int LD, double *A_, double *B_, double *C)
 {
   // B_L2_CACHED = buffer + 64 - ((int)&buffer) % 64;
-  B_L2_CACHED = aligned_alloc(64, 5000*sizeof(double));
+  B_L2_CACHED = (double *) aligned_alloc(64, 8200 * sizeof(double));
   double *A = A_;
   double *B = B_;
   int lda = LD;
@@ -467,4 +468,11 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
       B[j * lda + i] = t;
     }
 #endif
+  free(B_L2_CACHED);
+  if (A != A_)
+  {
+    free(A);
+    free(B);
+  }
+  return;
 }
