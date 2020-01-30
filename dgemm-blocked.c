@@ -18,11 +18,11 @@ double *B_L2_CACHED = NULL;
 double *B_L1_CACHED = NULL;
 
 #if !defined(L1_M)
-#define L1_M 32
+#define L1_M 8
 #endif
 
 #if !defined(L1_N)
-#define L1_N 64
+#define L1_N 32
 #endif
 
 #if !defined(L1_K)
@@ -30,7 +30,7 @@ double *B_L1_CACHED = NULL;
 #endif
 
 #if !defined(L2_M)
-#define L2_M 64
+#define L2_M 32
 #endif
 
 #if !defined(L2_N)
@@ -91,11 +91,16 @@ static inline void do_block_SIMD(int lda, int ldb, int ldc, int M, int N, int K,
 
 static inline void do_block_SIMD5x4(int lda, int ldb, int ldc, double *A, double *B, double *C)
 {
-  register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
-  register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C + ldc);
-  register __m256d c20_c21_c22_c23 = _mm256_loadu_pd(C + 2 * ldc);
-  register __m256d c30_c31_c32_c33 = _mm256_loadu_pd(C + 3 * ldc);
-  register __m256d c40_c41_c42_c43 = _mm256_loadu_pd(C + 4 * ldc);
+  register int address = 0;
+  register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C + address);
+  address += ldc;
+  register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C + address);
+  address += ldc;
+  register __m256d c20_c21_c22_c23 = _mm256_loadu_pd(C + address);
+  address += ldc;
+  register __m256d c30_c31_c32_c33 = _mm256_loadu_pd(C + address);
+  address += ldc;
+  register __m256d c40_c41_c42_c43 = _mm256_loadu_pd(C + address);
 
   for (int kk = 0; kk < 4; ++kk)
   {
@@ -126,27 +131,42 @@ static inline void do_block_SIMD8x4(int lda, int ldb, int ldc, double *restrict 
   A = __builtin_assume_aligned(A, 16);
   B = __builtin_assume_aligned(B, 16);
   C = __builtin_assume_aligned(C, 16);
-
+  register double *address = C;
   register __m256d c00_c01_c02_c03 = _mm256_loadu_pd(C);
-  register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(C + ldc);
-  register __m256d c20_c21_c22_c23 = _mm256_loadu_pd(C + 2 * ldc);
-  register __m256d c30_c31_c32_c33 = _mm256_loadu_pd(C + 3 * ldc);
-  register __m256d c40_c41_c42_c43 = _mm256_loadu_pd(C + 4 * ldc);
-  register __m256d c50_c51_c52_c53 = _mm256_loadu_pd(C + 5 * ldc);
-  register __m256d c60_c61_c62_c63 = _mm256_loadu_pd(C + 6 * ldc);
-  register __m256d c70_c71_c72_c73 = _mm256_loadu_pd(C + 7 * ldc);
+  address += ldc;
+  register __m256d c10_c11_c12_c13 = _mm256_loadu_pd(address);
+  address += ldc;
+  register __m256d c20_c21_c22_c23 = _mm256_loadu_pd(address);
+  address += ldc;
+  register __m256d c30_c31_c32_c33 = _mm256_loadu_pd(address);
+  address += ldc;
+  register __m256d c40_c41_c42_c43 = _mm256_loadu_pd(address);
+  address += ldc;
+  register __m256d c50_c51_c52_c53 = _mm256_loadu_pd(address);
+  address += ldc;
+  register __m256d c60_c61_c62_c63 = _mm256_loadu_pd(address);
+  address += ldc;
+  register __m256d c70_c71_c72_c73 = _mm256_loadu_pd(address);
 
 #if 1
   for (int kk = 0; kk < 4; ++kk)
   {
-    register __m256d a0x = _mm256_broadcast_sd(A + kk);
-    register __m256d a1x = _mm256_broadcast_sd(A + kk + lda);
-    register __m256d a2x = _mm256_broadcast_sd(A + kk + 2 * lda);
-    register __m256d a3x = _mm256_broadcast_sd(A + kk + 3 * lda);
-    register __m256d a4x = _mm256_broadcast_sd(A + kk + 4 * lda);
-    register __m256d a5x = _mm256_broadcast_sd(A + kk + 5 * lda);
-    register __m256d a6x = _mm256_broadcast_sd(A + kk + 6 * lda);
-    register __m256d a7x = _mm256_broadcast_sd(A + kk + 7 * lda);
+    address = A + kk;
+    register __m256d a0x = _mm256_broadcast_sd(address);
+    address += lda;
+    register __m256d a1x = _mm256_broadcast_sd(address);
+    address += lda;
+    register __m256d a2x = _mm256_broadcast_sd(address);
+    address += lda;
+    register __m256d a3x = _mm256_broadcast_sd(address);
+    address += lda;
+    register __m256d a4x = _mm256_broadcast_sd(address);
+    address += lda;
+    register __m256d a5x = _mm256_broadcast_sd(address);
+    address += lda;
+    register __m256d a6x = _mm256_broadcast_sd(address);
+    address += lda;
+    register __m256d a7x = _mm256_broadcast_sd(address);
 
     register __m256d b = _mm256_loadu_pd(B + kk * ldb);
 
@@ -160,14 +180,23 @@ static inline void do_block_SIMD8x4(int lda, int ldb, int ldc, double *restrict 
     c70_c71_c72_c73 = _mm256_fmadd_pd(a7x, b, c70_c71_c72_c73);
   }
 #else
-  register __m256d a0x = _mm256_broadcast_sd(A);
-  register __m256d a1x = _mm256_broadcast_sd(A + lda);
-  register __m256d a2x = _mm256_broadcast_sd(A + 2 * lda);
-  register __m256d a3x = _mm256_broadcast_sd(A + 3 * lda);
-  register __m256d a4x = _mm256_broadcast_sd(A + 4 * lda);
-  register __m256d a5x = _mm256_broadcast_sd(A + 5 * lda);
-  register __m256d a6x = _mm256_broadcast_sd(A + 6 * lda);
-  register __m256d a7x = _mm256_broadcast_sd(A + 7 * lda);
+  address = A;
+  register __m256d a0x = _mm256_broadcast_sd(address);
+  address += lda;
+  register __m256d a1x = _mm256_broadcast_sd(address);
+  address += lda;
+  register __m256d a2x = _mm256_broadcast_sd(address);
+  address += lda;
+  register __m256d a3x = _mm256_broadcast_sd(address);
+  address += lda;
+  register __m256d a4x = _mm256_broadcast_sd(address);
+  address += lda;
+  register __m256d a5x = _mm256_broadcast_sd(address);
+  address += lda;
+  register __m256d a6x = _mm256_broadcast_sd(address);
+  address += lda;
+  register __m256d a7x = _mm256_broadcast_sd(address);
+  address += lda;
   register __m256d b = _mm256_loadu_pd(B);
 
   c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
@@ -178,14 +207,23 @@ static inline void do_block_SIMD8x4(int lda, int ldb, int ldc, double *restrict 
   c50_c51_c52_c53 = _mm256_fmadd_pd(a5x, b, c50_c51_c52_c53);
   c60_c61_c62_c63 = _mm256_fmadd_pd(a6x, b, c60_c61_c62_c63);
   c70_c71_c72_c73 = _mm256_fmadd_pd(a7x, b, c70_c71_c72_c73);
-  a0x = _mm256_broadcast_sd(A + 1);
-  a1x = _mm256_broadcast_sd(A + 1 + lda);
-  a2x = _mm256_broadcast_sd(A + 1 + 2 * lda);
-  a3x = _mm256_broadcast_sd(A + 1 + 3 * lda);
-  a4x = _mm256_broadcast_sd(A + 1 + 4 * lda);
-  a5x = _mm256_broadcast_sd(A + 1 + 5 * lda);
-  a6x = _mm256_broadcast_sd(A + 1 + 6 * lda);
-  a7x = _mm256_broadcast_sd(A + 1 + 7 * lda);
+  address = A + 1;
+  a0x = _mm256_broadcast_sd(address);
+  address += lda;
+  a1x = _mm256_broadcast_sd(address);
+  address += lda;
+  a2x = _mm256_broadcast_sd(address);
+  address += lda;
+  a3x = _mm256_broadcast_sd(address);
+  address += lda;
+  a4x = _mm256_broadcast_sd(address);
+  address += lda;
+  a5x = _mm256_broadcast_sd(address);
+  address += lda;
+  a6x = _mm256_broadcast_sd(address);
+  address += lda;
+  a7x = _mm256_broadcast_sd(address);
+
   b = _mm256_loadu_pd(B + 1 * ldb);
   c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
   c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
@@ -195,14 +233,26 @@ static inline void do_block_SIMD8x4(int lda, int ldb, int ldc, double *restrict 
   c50_c51_c52_c53 = _mm256_fmadd_pd(a5x, b, c50_c51_c52_c53);
   c60_c61_c62_c63 = _mm256_fmadd_pd(a6x, b, c60_c61_c62_c63);
   c70_c71_c72_c73 = _mm256_fmadd_pd(a7x, b, c70_c71_c72_c73);
-  a0x = _mm256_broadcast_sd(A + 2);
-  a1x = _mm256_broadcast_sd(A + 2 + lda);
-  a2x = _mm256_broadcast_sd(A + 2 + 2 * lda);
-  a3x = _mm256_broadcast_sd(A + 2 + 3 * lda);
-  a4x = _mm256_broadcast_sd(A + 2 + 4 * lda);
-  a5x = _mm256_broadcast_sd(A + 2 + 5 * lda);
-  a6x = _mm256_broadcast_sd(A + 2 + 6 * lda);
-  a7x = _mm256_broadcast_sd(A + 2 + 7 * lda);
+
+  address = A + 2;
+  a0x = _mm256_broadcast_sd(address);
+  address += lda;
+  a1x = _mm256_broadcast_sd(address);
+  address += lda;
+  a2x = _mm256_broadcast_sd(address);
+  address += lda;
+  a2x = _mm256_broadcast_sd(address);
+  address += lda;
+  a3x = _mm256_broadcast_sd(address);
+  address += lda;
+  a4x = _mm256_broadcast_sd(address);
+  address += lda;
+  a5x = _mm256_broadcast_sd(address);
+  address += lda;
+  a6x = _mm256_broadcast_sd(address);
+  address += lda;
+  a7x = _mm256_broadcast_sd(address);
+
   b = _mm256_loadu_pd(B + 2 * ldb);
   c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
   c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
@@ -212,14 +262,23 @@ static inline void do_block_SIMD8x4(int lda, int ldb, int ldc, double *restrict 
   c50_c51_c52_c53 = _mm256_fmadd_pd(a5x, b, c50_c51_c52_c53);
   c60_c61_c62_c63 = _mm256_fmadd_pd(a6x, b, c60_c61_c62_c63);
   c70_c71_c72_c73 = _mm256_fmadd_pd(a7x, b, c70_c71_c72_c73);
-  a0x = _mm256_broadcast_sd(A + 3);
-  a1x = _mm256_broadcast_sd(A + 3 + lda);
-  a2x = _mm256_broadcast_sd(A + 3 + 2 * lda);
-  a3x = _mm256_broadcast_sd(A + 3 + 3 * lda);
-  a4x = _mm256_broadcast_sd(A + 3 + 4 * lda);
-  a5x = _mm256_broadcast_sd(A + 3 + 5 * lda);
-  a6x = _mm256_broadcast_sd(A + 3 + 6 * lda);
-  a7x = _mm256_broadcast_sd(A + 3 + 7 * lda);
+
+  address = A + 3;
+  a0x = _mm256_broadcast_sd(address);
+  address += lda;
+  a1x = _mm256_broadcast_sd(address);
+  address += lda;
+  a2x = _mm256_broadcast_sd(address);
+  address += lda;
+  a3x = _mm256_broadcast_sd(address);
+  address += lda;
+  a4x = _mm256_broadcast_sd(address);
+  address += lda;
+  a5x = _mm256_broadcast_sd(address);
+  address += lda;
+  a6x = _mm256_broadcast_sd(address);
+  address += lda;
+  a7x = _mm256_broadcast_sd(address);
   b = _mm256_loadu_pd(B + 3 * ldb);
   c00_c01_c02_c03 = _mm256_fmadd_pd(a0x, b, c00_c01_c02_c03);
   c10_c11_c12_c13 = _mm256_fmadd_pd(a1x, b, c10_c11_c12_c13);
@@ -230,14 +289,23 @@ static inline void do_block_SIMD8x4(int lda, int ldb, int ldc, double *restrict 
   c60_c61_c62_c63 = _mm256_fmadd_pd(a6x, b, c60_c61_c62_c63);
   c70_c71_c72_c73 = _mm256_fmadd_pd(a7x, b, c70_c71_c72_c73);
 #endif
+
+  address = C;
   _mm256_storeu_pd(C, c00_c01_c02_c03);
-  _mm256_storeu_pd(C + ldc, c10_c11_c12_c13);
-  _mm256_storeu_pd(C + 2 * ldc, c20_c21_c22_c23);
-  _mm256_storeu_pd(C + 3 * ldc, c30_c31_c32_c33);
-  _mm256_storeu_pd(C + 4 * ldc, c40_c41_c42_c43);
-  _mm256_storeu_pd(C + 5 * ldc, c50_c51_c52_c53);
-  _mm256_storeu_pd(C + 6 * ldc, c60_c61_c62_c63);
-  _mm256_storeu_pd(C + 7 * ldc, c70_c71_c72_c73);
+  address+=ldc;
+  _mm256_storeu_pd(address, c10_c11_c12_c13);
+  address+=ldc;
+  _mm256_storeu_pd(address, c20_c21_c22_c23);
+  address+=ldc;
+  _mm256_storeu_pd(address, c30_c31_c32_c33);
+  address+=ldc;
+  _mm256_storeu_pd(address, c40_c41_c42_c43);
+  address+=ldc;
+  _mm256_storeu_pd(address, c50_c51_c52_c53);
+  address+=ldc;
+  _mm256_storeu_pd(address, c60_c61_c62_c63);
+  address+=ldc;
+  _mm256_storeu_pd(address, c70_c71_c72_c73);
 }
 
 /* This auxiliary subroutine performs a smaller dgemm operation
@@ -272,6 +340,7 @@ static inline void do_block(int lda, int ldb, int ldc, int M, int N, int K, doub
     /* For each column j of B */
     for (int k = 0; k < K; k += 4)
     {
+      register int I = A + i * lda + k;
       for (int j = 0; j < N; j += 4)
       {
         /* Compute C(i,j) */
@@ -283,7 +352,7 @@ static inline void do_block(int lda, int ldb, int ldc, int M, int N, int K, doub
 #ifdef TRANSPOSE
           do_block_SIMD(lda, M_, N_, K_, A + i * lda + k, B + j * lda + k, C + i * lda + j);
 #else
-          do_block_SIMD(lda, ldb, ldc, M_, N_, K_, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
+          do_block_SIMD(lda, ldb, ldc, M_, N_, K_, I, B + k * ldb + j, C + i * ldc + j);
 #endif
         }
         else
@@ -477,8 +546,9 @@ static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, do
   {
     for (int j = 0; j < N; j += L1_N)
     {
+      register int J = k * ldb + j;
 #ifdef ENABLE_L1_CACHING
-      populate_B_CACHED(ldb, B + k * ldb + j, B_L1_CACHED, L1_K, L1_N);
+      populate_B_CACHED(ldb, B + J, B_L1_CACHED, L1_K, L1_N);
 #endif
       for (int i = 0; i < M; i += L1_M)
       {
@@ -488,7 +558,7 @@ static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, do
 #ifdef ENABLE_L1_CACHING
         do_block8x4(lda, L1_N, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B_L1_CACHED, C + i * ldc + j);
 #else
-        do_block8x4(lda, ldb, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
+        do_block8x4(lda, ldb, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B + J, C + i * ldc + j);
 #endif
 #endif
       }
@@ -521,8 +591,9 @@ static inline void do_blockL2(int lda, int ldb, int ldc, int M, int N, int K, do
   {
     for (int k = 0; k < K; k += L2_K)
     {
+      register int J = k * ldb + j;
 #ifdef ENABLE_L2_CACHING
-      populate_B_CACHED(ldb, B + k * ldb + j, B_L2_CACHED, L2_K, L2_N);
+      populate_B_CACHED(ldb, B + J, B_L2_CACHED, L2_K, L2_N);
 #endif
       for (int i = 0; i < M; i += L2_M)
       {
@@ -532,7 +603,7 @@ static inline void do_blockL2(int lda, int ldb, int ldc, int M, int N, int K, do
 #ifdef ENABLE_L2_CACHING
         do_blockL1(lda, L2_N, ldc, L2_M, L2_N, L2_K, A + i * lda + k, B_L2_CACHED, C + i * ldc + j);
 #else
-        do_blockL1(lda, ldb, ldc, L2_M, L2_N, L2_K, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
+        do_blockL1(lda, ldb, ldc, L2_M, L2_N, L2_K, A + i * lda + k, B + J, C + i * ldc + j);
 #endif
 #endif
       }
