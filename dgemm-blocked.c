@@ -11,8 +11,10 @@
 
 const char *dgemm_desc = "Simple blocked dgemm.";
 
-// double buffer[16500];
+double buffer[16500];
 double *B_SUB_ALGN;
+
+double *B_L2_CACHED;
 
 #if !defined(L2_M)
 #define L2_M 64
@@ -41,8 +43,6 @@ double *B_SUB_ALGN;
 #if !defined(BLOCK_SIZEL3)
 #define BLOCK_SIZEL3 128
 #endif
-
-double B_L2_CACHE[1024];
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -357,23 +357,34 @@ static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, do
 //   }
 // }
 
-static inline void do_blockL2(int lda, int ldb , int ldc, int M, int N, int K, double *A, double *B, double *C)
+static inline void populate_B_CACHED(int ldb, double *B, int M, int N)
 {
-  // populate_B_ALGN();
-  for (int i = 0; i < M; i += L2_M)
+  for (int i = 0; i < M; i++)
   {
-    int M_ = min(L2_M, M - i);
-    for (int k = 0; k < K; k += L2_K)
+    for (int j = 0; j < N; j++)
     {
-      int K_ = min(L2_K, K - k);
-      for (int j = 0; j < N; j += L2_N)
+      B_L2_CACHED[i * N + j] = B[i * ldb + j];
+    }
+  }
+}
+
+static inline void do_blockL2(int lda, int ldb, int ldc, int M, int N, int K, double *A, double *B, double *C)
+{
+  for (int k = 0; k < K; k += L2_K)
+  {
+    int K_ = min(L2_K, K - k);
+    for (int j = 0; j < N; j += L2_N)
+    {
+      int N_ = min(L2_N, N - j);
+      populate_B_CACHED(ldb, B + k * ldb + j, L2_K, L2_N);
+      for (int i = 0; i < M; i += L2_M)
       {
-        int N_ = min(L2_N, N - j);
+        int M_ = min(L2_M, M - i);
 
 #ifdef TRANSPOSE
         do_blockL1(lda, M_, N_, K_, A + i * lda + k, B + j * ldb + k, C + i * ldc + j);
 #else
-        do_blockL1(lda, ldb, ldc, M_, N_, K_, A + i * lda + k, B + k * ldb + j, C + i * ldc + j);
+        do_blockL1(lda, L2_N, ldc, M_, N_, K_, A + i * lda + k, B_L2_CACHED, C + i * ldc + j);
 #endif
       }
     }
@@ -408,6 +419,7 @@ static double *pad(int lda, int N, double *A)
  * On exit, A and B maintain their input values. */
 void square_dgemm(int LD, double *A_, double *B_, double *C)
 {
+  B_L2_CACHED = buffer + 64 - ((int)&buffer) % 64;
   double *A = A_;
   double *B = B_;
   int lda = LD;
@@ -421,7 +433,6 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
     lda = L;
     ldb = L;
   }
-  // B_SUB_ALGN = buffer + 64 - ((int)&buffer) % 64;
 #ifdef TRANSPOSE
   for (int i = 0; i < lda; ++i)
     for (int j = i + 1; j < lda; ++j)
