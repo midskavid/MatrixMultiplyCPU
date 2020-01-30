@@ -22,11 +22,11 @@ double *B_L1_CACHED = NULL;
 #endif
 
 #if !defined(L1_N)
-#define L1_N 32
+#define L1_N 64
 #endif
 
 #if !defined(L1_K)
-#define L1_K 64
+#define L1_K 32
 #endif
 
 #if !defined(L2_M)
@@ -42,15 +42,15 @@ double *B_L1_CACHED = NULL;
 #endif
 
 #if !defined(L3_M)
-#define L3_M 128
+#define L3_M 64
 #endif
 
 #if !defined(L3_N)
-#define L3_N 128
+#define L3_N 64
 #endif
 
 #if !defined(L3_K)
-#define L3_K 128
+#define L3_K 64
 #endif
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
