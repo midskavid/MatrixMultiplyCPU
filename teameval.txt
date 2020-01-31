@@ -13,32 +13,45 @@ If you worked alone leave column B blank
 
 (1) List the names of your team members:
 
-A:
+A: Mridul Kavidayal
 
  
-B:
+B: Shivam Lakhotia
 
  
  
 (2) Estimate how much time each team member devoted to this project, in HOURS.
 
   	                        A 	       B
-meetings 	  	  	 
-coding 	  	  	 
-writeup 	  	  	 
-planning (alone) 	  	  	 
-total (including meetings) 	  	  	 
+meetings 	  	  	        10          10
+coding 	  	  	            40          40
+writeup 	  	  	        8           8
+planning (alone) 	  	  	 2          2
+total (including meetings) 	 60         60 	  	 
 
 
 (3) Discuss the following.
 (a) If you worked in a team, what were the major responsibilities
     of each team member?
+    Both of us planned the work required to do and then divided it accordingly.
+    Mridul did the SIMD and Blocking. Shivam did the 3-Level caching, transpose and goto-paper impl.
 (b) Did you complete the assignment?
-(c) What were your major strengths and weaknesses in doing this
+    Yes.
+(c) What were your major strengths and weaknesses in doing thisx
     assignment (individually or in a team)?
+    Strength was trying out a lot of possibilities. We experimented a lot. Only a few experiments did give us results but we 
+    did learn a lot.
+    Weakness was not able to figure out how to combine appropriately various method. A lot methods were giving us improvements but 
+    we couldn't combnine all and get the best improvement.
     If in a team, also discuss how your team worked together.
 (d) What  lessons did you learn from these events.
+    It is important incremently keep taking one branch forward in parallel to experimenting.
 (e) If in a team, whether and how you plan to change the way
     your work together .
+    No. I think worked pretty in sync and did the tasks as expected.
 (f) Anything else that comes to mind.
+    This assignment taught us a lot but loosing masks hurt!
 (g) What suggestions do you have to improve this assignment?
+    Give all posibilities/ways to imporve to the students and let students try out all of them 
+    instead of them finding what are ways to improve because sometimes we get stuck with one method.
+    And that takes up a lot of time.
