@@ -1,5 +1,7 @@
-*.out
 *.o
+*.out
+*.txt
+*.png
 benchmark-blas
 benchmark-blocked
 benchmark-naive
