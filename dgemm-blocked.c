@@ -51,7 +51,7 @@ double *A_L3_CACHED = NULL;
 #endif
 
 #if !defined(L3_K)
-#define L3_K 64
+#define L3_K 128
 #endif
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
