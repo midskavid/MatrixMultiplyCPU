@@ -18,27 +18,27 @@ double *B_L2_CACHED = NULL;
 double *B_L1_CACHED = NULL;
 
 #if !defined(L1_M)
-#define L1_M 8
+#define L1_M 2
 #endif
 
 #if !defined(L1_N)
-#define L1_N 16
+#define L1_N 4
 #endif
 
 #if !defined(L1_K)
-#define L1_K 16
+#define L1_K 4
 #endif
 
 #if !defined(L2_M)
-#define L2_M 64
+#define L2_M 32
 #endif
 
 #if !defined(L2_N)
-#define L2_N 64
+#define L2_N 32
 #endif
 
 #if !defined(L2_K)
-#define L2_K 64
+#define L2_K 32
 #endif
 
 #if !defined(L3_M)
@@ -503,7 +503,7 @@ static inline void do_block8x4(int lda, int ldb, int ldc, int M, int N, int K, d
   for (int i = 0; i < M; i += 8)
   {
     int I_LDA = i * lda;
-    int I_LDC = i*ldc;
+    int I_LDC = i * ldc;
     for (int k = 0; k < K; k += 4)
     {
       int I_LDA_K = I_LDA + k;
@@ -520,21 +520,24 @@ static inline void do_block8x4(int lda, int ldb, int ldc, int M, int N, int K, d
 
 static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, double *A, double *B, double *C)
 {
-  for (int k = 0; k < K; k += L1_K)
+  for (int i = 0; i < M; i += L1_M)
   {
-    int K_LDB = k * ldb;
-    for (int j = 0; j < N; j += L1_N)
+    for (int k = 0; k < K; k += L1_K)
     {
-      register int K_LDB_J = K_LDB + j;
-#ifdef ENABLE_L1_CACHING
-      populate_B_CACHED(ldb, B + K_LDB_J, B_L1_CACHED, L1_K, L1_N);
-#endif
-      for (int i = 0; i < M; i += L1_M)
+      int K_LDB = k * ldb;
+      for (int j = 0; j < N; j += L1_N)
       {
+        int K_LDB_J = K_LDB + j;
+        int I_LDA = i * lda;
+        int I_LDC = i * ldc;
+        int I_LDA_K = I_LDA + k;
 #ifdef ENABLE_L1_CACHING
-        do_block8x4(lda, L1_N, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B_L1_CACHED, C + i * ldc + j);
+        populate_B_CACHED(ldb, B + K_LDB_J, B_L1_CACHED, L1_K, L1_N);
+#endif
+#ifdef ENABLE_L1_CACHING
+        do_block(lda, L1_N, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B_L1_CACHED, C + i * ldc + j);
 #else
-        do_block8x4(lda, ldb, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B + K_LDB_J, C + i * ldc + j);
+        do_block(lda, ldb, ldc, L1_M, L1_N, L1_K, A + I_LDA_K, B + K_LDB_J, C + I_LDC + j);
 #endif
       }
     }
@@ -562,11 +565,11 @@ static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, do
 
 static inline void do_blockL2(int lda, int ldb, int ldc, int M, int N, int K, double *A, double *B, double *C)
 {
-  for (int k = 0; k < K; k += L2_K)
+  for (int j = 0; j < N; j += L2_N)
   {
-    int K_LDB = k*ldb;
-    for (int j = 0; j < N; j += L2_N)
+    for (int k = 0; k < K; k += L2_K)
     {
+      int K_LDB = k * ldb;
       register int J = K_LDB + j;
 #ifdef ENABLE_L2_CACHING
       populate_B_CACHED(ldb, B + J, B_L2_CACHED, L2_K, L2_N);
@@ -616,9 +619,9 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
 {
   // B_L2_CACHED = buffer + 64 - ((int)&buffer) % 64;
   if (B_L2_CACHED == NULL)
-    B_L2_CACHED = (double *)aligned_alloc(64, 10240 * sizeof(double));
+    B_L2_CACHED = (double *)aligned_alloc(64, 8192 * sizeof(double));
   if (B_L1_CACHED == NULL)
-    B_L1_CACHED = (double *)aligned_alloc(64, 10240 * sizeof(double));
+    B_L1_CACHED = (double *)aligned_alloc(64, 8192 * sizeof(double));
 
   double *A = A_;
   double *B = B_;
@@ -644,12 +647,12 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
   /* For each block-row of A */
   for (int i = 0; i < M; i += L3_M)
   {
-    int I_LDC = i*ldc;
-    int I_LDA = i*lda;
+    int I_LDC = i * ldc;
+    int I_LDA = i * lda;
     for (int k = 0; k < K; k += L3_K)
     {
       int A_I = I_LDA + k;
-      int K_LDB = k*ldb; 
+      int K_LDB = k * ldb;
       for (int j = 0; j < N; j += L3_N)
       {
         /* Perform individual block dgemm */
