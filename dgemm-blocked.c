@@ -779,7 +779,7 @@ void square_dgemm(int LD, double *A_, double *B_, double *C)
       {
 #ifdef ENABLE_L3_CACHING
         do_blockL2(L3_K, ldb, ldc, L3_M, L3_N, L3_K, A_L3_CACHED, B + K_LDB + j, C + I_LDC + j);
-#elif
+#else
         /* Perform individual block dgemm */
         do_blockL2(lda, ldb, ldc, L3_M, L3_N, L3_K, A + A_I, B + K_LDB + j, C + I_LDC + j);
 #endif
