@@ -69,6 +69,65 @@ static inline void populate_B_CACHED(int ldb, double *B, double *B_Cached, int M
   }
 }
 
+
+
+
+static inline void do_block_SIMD8x8(int lda, int ldb, int ldc, double *restrict A, double *restrict B, double *restrict C)
+{
+
+  register __m512d c00_c01_c02_c03 = _mm512_loadu_pd(C);
+  register __m512d c10_c11_c12_c13 = _mm512_loadu_pd(C + ldc);
+  register __m512d c20_c21_c22_c23 = _mm512_loadu_pd(C + 2 * ldc);
+  register __m512d c30_c31_c32_c33 = _mm512_loadu_pd(C + 3 * ldc);
+  register __m512d c40_c41_c42_c43 = _mm512_loadu_pd(C + 4 * ldc);
+  register __m512d c50_c51_c52_c53 = _mm512_loadu_pd(C + 5 * ldc);
+  register __m512d c60_c61_c62_c63 = _mm512_loadu_pd(C + 6 * ldc);
+  register __m512d c70_c71_c72_c73 = _mm512_loadu_pd(C + 7 * ldc);
+
+
+  for (int kk = 0; kk < 8; ++kk)
+  {
+    register __m512d a0x = _mm512_broadcast_sd(A + kk);
+    register __m512d a1x = _mm512_broadcast_sd(A + kk + lda);
+    register __m512d a2x = _mm512_broadcast_sd(A + kk + 2 * lda);
+    register __m512d a3x = _mm512_broadcast_sd(A + kk + 3 * lda);
+    register __m512d a4x = _mm512_broadcast_sd(A + kk + 4 * lda);
+    register __m512d a5x = _mm512_broadcast_sd(A + kk + 5 * lda);
+    register __m512d a6x = _mm512_broadcast_sd(A + kk + 6 * lda);
+    register __m512d a7x = _mm512_broadcast_sd(A + kk + 7 * lda);
+
+    register __m512d b = _mm512_loadu_pd(B + kk * ldb);
+
+    c00_c01_c02_c03 = _mm512_fmadd_pd(a0x, b, c00_c01_c02_c03);
+    c10_c11_c12_c13 = _mm512_fmadd_pd(a1x, b, c10_c11_c12_c13);
+    c20_c21_c22_c23 = _mm512_fmadd_pd(a2x, b, c20_c21_c22_c23);
+    c30_c31_c32_c33 = _mm512_fmadd_pd(a3x, b, c30_c31_c32_c33);
+    c40_c41_c42_c43 = _mm512_fmadd_pd(a4x, b, c40_c41_c42_c43);
+    c50_c51_c52_c53 = _mm512_fmadd_pd(a5x, b, c50_c51_c52_c53);
+    c60_c61_c62_c63 = _mm512_fmadd_pd(a6x, b, c60_c61_c62_c63);
+    c70_c71_c72_c73 = _mm512_fmadd_pd(a7x, b, c70_c71_c72_c73);
+  }
+  _mm512_storeu_pd(C, c00_c01_c02_c03);
+  _mm512_storeu_pd(C + ldc, c10_c11_c12_c13);
+  _mm512_storeu_pd(C + 2 * ldc, c20_c21_c22_c23);
+  _mm512_storeu_pd(C + 3 * ldc, c30_c31_c32_c33);
+  _mm512_storeu_pd(C + 4 * ldc, c40_c41_c42_c43);
+  _mm512_storeu_pd(C + 5 * ldc, c50_c51_c52_c53);
+  _mm512_storeu_pd(C + 6 * ldc, c60_c61_c62_c63);
+  _mm512_storeu_pd(C + 7 * ldc, c70_c71_c72_c73);
+}
+
+
+
+
+
+
+
+
+
+
+
+
 /* This auxiliary subroutine performs a smaller dgemm operation
  *  C := C + A * B using SIMD operations
  * where C is M-by-N, A is M-by-K, and B is K-by-N. */
@@ -616,22 +675,22 @@ static inline void do_block5x4(int lda, int ldb, int ldc, int M, int N, int K, d
 #endif
 }
 
-static inline void do_block8x4(int lda, int ldb, int ldc, int M, int N, int K, double *A, double *B, double *C)
+static inline void do_block8x8(int lda, int ldb, int ldc, int M, int N, int K, double *A, double *B, double *C)
 {
   /* For each row i of A */
   for (int i = 0; i < M; i += 8)
   {
     int I_LDA = i * lda;
     int I_LDC = i * ldc;
-    for (int k = 0; k < K; k += 4)
+    for (int k = 0; k < K; k += 8)
     {
       int I_LDA_K = I_LDA + k;
       int K_LDB = k * ldb;
-      for (int j = 0; j < N; j += 4)
+      for (int j = 0; j < N; j += 8)
       {
         /* For each column j of B */
         /* Compute C(i,j) */
-        do_block_SIMD8x4(lda, ldb, ldc, A + I_LDA_K, B + K_LDB + j, C + I_LDC + j);
+        do_block_SIMD8x8(lda, ldb, ldc, A + I_LDA_K, B + K_LDB + j, C + I_LDC + j);
       }
     }
   }
@@ -651,9 +710,9 @@ static inline void do_blockL1(int lda, int ldb, int ldc, int M, int N, int K, do
       for (int i = 0; i < M; i += L1_M)
       {
 #ifdef ENABLE_L1_CACHING
-        do_block8x4(lda, L1_N, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B_L1_CACHED, C + i * ldc + j);
+        do_block8x8(lda, L1_N, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B_L1_CACHED, C + i * ldc + j);
 #else
-        do_block8x4(lda, ldb, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B + K_LDB_J, C + i * ldc + j);
+        do_block8x8(lda, ldb, ldc, L1_M, L1_N, L1_K, A + i * lda + k, B + K_LDB_J, C + i * ldc + j);
 #endif
       }
     }
